@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>计步奖励播放系统</title>
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --bg-color: #121212;
+            --panel-bg: rgba(30, 30, 30, 0.9);
+            --text-color: #ffffff;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 媒体播放区域 */
+        #mediaContainer {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            width: 100%;
+        }
+        video {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+
+        /* 底部隐藏状态栏 (细线进度条 + 动画百分比) */
+        #miniStatusBar {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #miniStatusBar.show {
+            opacity: 1;
+        }
+        #miniProgressBg {
+            flex: 1;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            margin: 0 10px;
+            border-radius: 2px;
+            position: relative;
+        }
+        #miniProgressBar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            border-radius: 2px;
+        }
+        #miniPercent {
+            font-size: 12px;
+            margin-right: 10px;
+            font-weight: bold;
+            color: var(--primary);
+            display: inline-block;
+        }
+
+        /* 百分比上涨动画 */
+        @keyframes percentPop {
+            0% { transform: scale(1); color: var(--primary); }
+            50% { transform: scale(1.5); color: #81C784; text-shadow: 0 0 8px #81C784; }
+            100% { transform: scale(1); color: var(--primary); }
+        }
+        .pop-anim {
+            animation: percentPop 0.4s ease-out;
+        }
+
+        /* 设置面板 */
+        #settingsPanel {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border-top-left-radius: 15px;
+            border-top-right-radius: 15px;
+            padding: 20px;
+            box-sizing: border-box;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 20;
+        }
+        #settingsPanel.hidden {
+            transform: translateY(100%);
+        }
+
+        /* 悬浮隐藏/显示按钮 */
+        #togglePanelBtn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            cursor: pointer;
+            z-index: 30;
+            transition: transform 0.3s;
+        }
+        #togglePanelBtn.rotated {
+            transform: rotate(180deg);
+            background: #555;
+            bottom: 30px; /* 面板隐藏时按钮稍微往上抬，避免挡住细线进度条 */
+        }
+
+        /* 面板内部控件样式 */
+        .control-group {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .control-group label {
+            flex: 1;
+            font-size: 14px;
+        }
+        input[type="range"] {
+            flex: 2;
+            accent-color: var(--primary);
+        }
+        input[type="number"] {
+            width: 60px;
+            margin-left: 10px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px;
+            text-align: center;
+        }
+        input[type="file"] {
+            width: 100%;
+            margin-top: 5px;
+            color: #ccc;
+        }
+        .btn-auth {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #stepCounterDisplay {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="mediaContainer">
+        <video id="player" playsinline></video>
+    </div>
+
+    <div id="miniStatusBar">
+        <div id="miniProgressBg">
+            <div id="miniProgressBar"></div>
+        </div>
+        <div id="miniPercent">0%</div>
+    </div>
+
+    <div id="settingsPanel">
+        <div class="control-group">
+            <label>步数统计: <span id="stepCounterDisplay">0</span> 步</label>
+            <button class="btn-auth" id="authBtn">授权计步权限</button>
+        </div>
+        
+        <div class="control-group">
+            <label>上传媒体 (音/视频)</label>
+            <input type="file" id="mediaUpload" accept="video/*,audio/*">
+        </div>
+
+        <div class="control-group">
+            <label>播放进度</label>
+            <input type="range" id="progressSlider" min="0" max="100" value="0" step="0.1">
+            <span id="timeDisplay" style="margin-left: 10px; font-size: 12px; width: 80px; text-align: right;">00:00 / 00:00</span>
+        </div>
+
+        <div class="control-group">
+            <label>播放速度</label>
+            <input type="range" id="speedSlider" min="0.25" max="3" value="1" step="0.05">
+            <input type="number" id="speedInput" min="0.25" max="3" value="1" step="0.05">
+        </div>
+
+        <div class="control-group">
+            <label>音量大小</label>
+            <input type="range" id="volumeSlider" min="0" max="1" value="1" step="0.01">
+        </div>
+    </div>
+
+    <button id="togglePanelBtn">↓</button>
+
+    <script>
+        // DOM 元素获取
+        const player = document.getElementById('player');
+        const mediaUpload = document.getElementById('mediaUpload');
+        
+        const progressSlider = document.getElementById('progressSlider');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedInput = document.getElementById('speedInput');
+        const volumeSlider = document.getElementById('volumeSlider');
+        
+        const settingsPanel = document.getElementById('settingsPanel');
+        const togglePanelBtn = document.getElementById('togglePanelBtn');
+        const miniStatusBar = document.getElementById('miniStatusBar');
+        const miniProgressBar = document.getElementById('miniProgressBar');
+        const miniPercent = document.getElementById('miniPercent');
+        
+        const authBtn = document.getElementById('authBtn');
+        const stepCounterDisplay = document.getElementById('stepCounterDisplay');
+
+        // 状态变量
+        let isDraggingProgress = false; // 防止拖动进度条时被 timeupdate 事件干扰
+        let lastPercentInt = -1; // 用于触发百分比动画
+        let stepCount = 0;
+        let lastStepTime = 0;
+        let playTimeout = null;
+        let objectUrl = null;
+
+        // 常量设置
+        const STEP_THRESHOLD = 1.2; // 步频检测阈值，根据手机灵敏度可微调
+        const STEP_COOLDOWN = 400; // 连续两步之间的最小间隔(毫秒)
+        const PLAY_DURATION = 2000; // 走一步后，媒体持续播放的时间(毫秒)
+
+        // -------------------------
+        // 1. 本地文件上传逻辑
+        // -------------------------
+        mediaUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // 释放旧的 URL 避免内存泄漏
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            
+            objectUrl = URL.createObjectURL(file);
+            player.src = objectUrl;
+            player.load();
+            
+            // 重置状态
+            stepCount = 0;
+            stepCounterDisplay.textContent = stepCount;
+            lastPercentInt = -1;
+            miniPercent.textContent = "0%";
+            miniProgressBar.style.width = "0%";
+        });
+
+        // -------------------------
+        // 2. 媒体控制逻辑 (进度、速度、音量)
+        // -------------------------
+        
+        // 格式化时间 (秒 -> mm:ss)
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "00:00";
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        // 监听视频时间更新
+        player.addEventListener('timeupdate', () => {
+            if (!player.duration) return;
+            
+            const current = player.currentTime;
+            const duration = player.duration;
+            const percent = (current / duration) * 100;
+            
+            // 如果用户正在拖动，则不更新滑块，避免冲突和 Bug
+            if (!isDraggingProgress) {
+                progressSlider.value = percent;
+                timeDisplay.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+            }
+
+            // 更新隐藏面板时的细线进度条
+            miniProgressBar.style.width = `${percent}%`;
+            
+            // 处理百分比数字动画
+            const currentPercentInt = Math.floor(percent);
+            if (currentPercentInt > lastPercentInt && currentPercentInt > 0) {
+                miniPercent.textContent = `${currentPercentInt}%`;
+                triggerPercentAnimation();
+                lastPercentInt = currentPercentInt;
+            }
+        });
+
+        // 进度条拖动事件处理 (核心防 Bug 逻辑)
+        progressSlider.addEventListener('mousedown', () => isDraggingProgress = true);
+        progressSlider.addEventListener('touchstart', () => isDraggingProgress = true, {passive: true});
+        
+        progressSlider.addEventListener('input', () => {
+            // 拖动过程中只更新时间文本显示，不直接改 player 进度（防止卡顿）
+            if (player.duration) {
+                const targetTime = (progressSlider.value / 100) * player.duration;
+                timeDisplay.textContent = `${formatTime(targetTime)} / ${formatTime(player.duration)}`;
+            }
+        });
+
+        const updatePlayerTime = () => {
+            if (player.duration) {
+                player.currentTime = (progressSlider.value / 100) * player.duration;
+            }
+            isDraggingProgress = false; // 拖动结束，恢复自动更新
+        };
+        progressSlider.addEventListener('mouseup', updatePlayerTime);
+        progressSlider.addEventListener('touchend', updatePlayerTime);
+
+        // 播放速度控制 (双向绑定)
+        speedSlider.addEventListener('input', (e) => {
+            const speed = parseFloat(e.target.value);
+            player.playbackRate = speed;
+            speedInput.value = speed;
+        });
+        speedInput.addEventListener('input', (e) => {
+            let speed = parseFloat(e.target.value);
+            if (isNaN(speed)) return;
+            // 限制范围
+            if (speed < 0.25) speed = 0.25;
+            if (speed > 3) speed = 3;
+            player.playbackRate = speed;
+            speedSlider.value = speed;
+        });
+
+        // 音量控制
+        volumeSlider.addEventListener('input', (e) => {
+            player.volume = e.target.value;
+        });
+
+        // -------------------------
+        // 3. UI 面板切换与动画
+        // -------------------------
+        togglePanelBtn.addEventListener('click', () => {
+            settingsPanel.classList.toggle('hidden');
+            
+            // 切换按钮图标与样式
+            if (settingsPanel.classList.contains('hidden')) {
+                togglePanelBtn.textContent = '↑';
+                togglePanelBtn.classList.add('rotated');
+                miniStatusBar.classList.add('show');
+            } else {
+                togglePanelBtn.textContent = '↓';
+                togglePanelBtn.classList.remove('rotated');
+                miniStatusBar.classList.remove('show');
+            }
+        });
+
+        // 触发百分比跳动动画
+        function triggerPercentAnimation() {
+            miniPercent.classList.remove('pop-anim');
+            // 强制浏览器重绘，以便重新触发动画
+            void miniPercent.offsetWidth; 
+            miniPercent.classList.add('pop-anim');
+        }
+
+        // -------------------------
+        // 4. 计步器与实时动态播放系统
+        // -------------------------
+        
+        // 当产生步数时触发播放
+        function handleStepDetected() {
+            stepCount++;
+            stepCounterDisplay.textContent = stepCount;
+            
+            // 尝试播放 (需要用户至少交互过一次页面)
+            if (player.src && player.paused) {
+                player.play().catch(err => {
+                    console.log("浏览器阻止了自动播放，请先点击页面任意位置", err);
+                });
+            }
+
+            // 刷新停止播放的倒计时
+            clearTimeout(playTimeout);
+            playTimeout = setTimeout(() => {
+                player.pause();
+            }, PLAY_DURATION);
+        }
+
+        // 运动传感器核心算法
+        function handleMotion(event) {
+            // 获取包含重力的加速度数据
+            let acc = event.accelerationIncludingGravity;
+            if (!acc || acc.x === null) return;
+
+            // 计算三轴加速度矢量和
+            let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+            
+            // 消除标准重力 (约 9.8 m/s²) 的影响
+            let delta = Math.abs(magnitude - 9.8);
+
+            // 如果加速度变化超过阈值，判定为正在运动
+            if (delta > STEP_THRESHOLD) {
+                let now = Date.now();
+                // 冷却时间，防止同一次震动被多次计算
+                if (now - lastStepTime > STEP_COOLDOWN) {
+                    lastStepTime = now;
+                    handleStepDetected();
+                }
+            }
+        }
+
+        // 请求权限 (适配 iOS 13+ 策略)
+        authBtn.addEventListener('click', () => {
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('devicemotion', handleMotion);
+                            authBtn.textContent = "已授权计步";
+                            authBtn.style.background = "var(--primary)";
+                        } else {
+                            alert("计步权限被拒绝！请在系统设置中允许。");
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // Android 或老版本 iOS
+                window.addEventListener('devicemotion', handleMotion);
+                authBtn.textContent = "已开启计步";
+                authBtn.style.background = "var(--primary)";
+            }
+        });
+
+    </script>
+</body>
+</html>
