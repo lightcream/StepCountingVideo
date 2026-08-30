@@ -39,7 +39,7 @@
             display: block;
         }
 
-        /* 底部隐藏状态栏 (细线进度条 + 动画百分比) */
+        /* 底部隐藏状态栏 */
         #miniStatusBar {
             position: absolute;
             bottom: 0;
@@ -80,7 +80,7 @@
             display: inline-block;
         }
 
-        /* 百分比上涨动画 */
+        /* 百分比动画 */
         @keyframes percentPop {
             0% { transform: scale(1); color: var(--primary); }
             50% { transform: scale(1.5); color: #81C784; text-shadow: 0 0 8px #81C784; }
@@ -108,7 +108,7 @@
             transform: translateY(100%);
         }
 
-        /* 悬浮隐藏/显示按钮 */
+        /* 悬浮按钮 */
         #togglePanelBtn {
             position: absolute;
             bottom: 20px;
@@ -128,10 +128,10 @@
         #togglePanelBtn.rotated {
             transform: rotate(180deg);
             background: #555;
-            bottom: 30px; /* 面板隐藏时按钮稍微往上抬，避免挡住细线进度条 */
+            bottom: 30px;
         }
 
-        /* 面板内部控件样式 */
+        /* 面板控件 */
         .control-group {
             margin-bottom: 15px;
             display: flex;
@@ -175,14 +175,42 @@
             font-weight: bold;
             color: var(--primary);
         }
+
+        /* 核心修复：防浏览器拦截的解锁遮罩层 */
+        #unlockOverlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #4CAF50;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
+            cursor: pointer;
+        }
+        #unlockOverlay.hidden {
+            display: none;
+        }
+        #unlockOverlay span {
+            font-size: 14px;
+            color: #ccc;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
 
+    <!-- 媒体容器 (加上了 preload="auto" 强制预加载元数据) -->
     <div id="mediaContainer">
-        <video id="player" playsinline></video>
+        <video id="player" playsinline preload="auto"></video>
     </div>
 
+    <!-- 极简底部状态栏 -->
     <div id="miniStatusBar">
         <div id="miniProgressBg">
             <div id="miniProgressBar"></div>
@@ -190,6 +218,13 @@
         <div id="miniPercent">0%</div>
     </div>
 
+    <!-- 自动播放解锁遮罩 (默认隐藏) -->
+    <div id="unlockOverlay" class="hidden">
+        ⚠️ 浏览器拦截了自动播放
+        <span>（请随便点击屏幕任意位置，解除系统限制）</span>
+    </div>
+
+    <!-- 设置面板 -->
     <div id="settingsPanel">
         <div class="control-group">
             <label>步数统计: <span id="stepCounterDisplay">0</span> 步</label>
@@ -222,37 +257,41 @@
     <button id="togglePanelBtn">↓</button>
 
     <script>
-        // DOM 元素获取
         const player = document.getElementById('player');
         const mediaUpload = document.getElementById('mediaUpload');
-        
         const progressSlider = document.getElementById('progressSlider');
         const timeDisplay = document.getElementById('timeDisplay');
         const speedSlider = document.getElementById('speedSlider');
         const speedInput = document.getElementById('speedInput');
         const volumeSlider = document.getElementById('volumeSlider');
-        
         const settingsPanel = document.getElementById('settingsPanel');
         const togglePanelBtn = document.getElementById('togglePanelBtn');
         const miniStatusBar = document.getElementById('miniStatusBar');
         const miniProgressBar = document.getElementById('miniProgressBar');
         const miniPercent = document.getElementById('miniPercent');
-        
         const authBtn = document.getElementById('authBtn');
         const stepCounterDisplay = document.getElementById('stepCounterDisplay');
+        const unlockOverlay = document.getElementById('unlockOverlay');
 
-        // 状态变量
-        let isDraggingProgress = false; // 防止拖动进度条时被 timeupdate 事件干扰
-        let lastPercentInt = -1; // 用于触发百分比动画
+        let isDraggingProgress = false;
+        let lastPercentInt = -1;
         let stepCount = 0;
         let lastStepTime = 0;
         let playTimeout = null;
         let objectUrl = null;
+        let playRejected = false; // 记录是否被浏览器拦截
 
-        // 常量设置
-        const STEP_THRESHOLD = 1.2; // 步频检测阈值，根据手机灵敏度可微调
-        const STEP_COOLDOWN = 400; // 连续两步之间的最小间隔(毫秒)
-        const PLAY_DURATION = 2000; // 走一步后，媒体持续播放的时间(毫秒)
+        const STEP_THRESHOLD = 1.2;
+        const STEP_COOLDOWN = 400;
+        const PLAY_DURATION = 2000;
+
+        // 格式化时间 (加入对 NaN 的判断，防止 00:00 BUG)
+        function formatTime(seconds) {
+            if (isNaN(seconds) || !isFinite(seconds)) return "00:00";
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
 
         // -------------------------
         // 1. 本地文件上传逻辑
@@ -261,51 +300,41 @@
             const file = e.target.files[0];
             if (!file) return;
 
-            // 释放旧的 URL 避免内存泄漏
             if (objectUrl) URL.revokeObjectURL(objectUrl);
-            
             objectUrl = URL.createObjectURL(file);
             player.src = objectUrl;
-            player.load();
+            player.load(); // 触发加载
             
-            // 重置状态
             stepCount = 0;
             stepCounterDisplay.textContent = stepCount;
             lastPercentInt = -1;
             miniPercent.textContent = "0%";
             miniProgressBar.style.width = "0%";
+            progressSlider.value = 0;
+        });
+
+        // 【修复BUG】: 只要获取到了媒体的元数据，立刻更新总时长显示，解决全是 00:00 的问题
+        player.addEventListener('loadedmetadata', () => {
+            timeDisplay.textContent = `00:00 / ${formatTime(player.duration)}`;
         });
 
         // -------------------------
-        // 2. 媒体控制逻辑 (进度、速度、音量)
+        // 2. 媒体控制逻辑
         // -------------------------
-        
-        // 格式化时间 (秒 -> mm:ss)
-        function formatTime(seconds) {
-            if (isNaN(seconds)) return "00:00";
-            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-            return `${m}:${s}`;
-        }
-
-        // 监听视频时间更新
         player.addEventListener('timeupdate', () => {
-            if (!player.duration) return;
+            if (!player.duration || isNaN(player.duration)) return;
             
             const current = player.currentTime;
             const duration = player.duration;
             const percent = (current / duration) * 100;
             
-            // 如果用户正在拖动，则不更新滑块，避免冲突和 Bug
             if (!isDraggingProgress) {
                 progressSlider.value = percent;
                 timeDisplay.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
             }
 
-            // 更新隐藏面板时的细线进度条
             miniProgressBar.style.width = `${percent}%`;
             
-            // 处理百分比数字动画
             const currentPercentInt = Math.floor(percent);
             if (currentPercentInt > lastPercentInt && currentPercentInt > 0) {
                 miniPercent.textContent = `${currentPercentInt}%`;
@@ -314,55 +343,42 @@
             }
         });
 
-        // 进度条拖动事件处理 (核心防 Bug 逻辑)
         progressSlider.addEventListener('mousedown', () => isDraggingProgress = true);
         progressSlider.addEventListener('touchstart', () => isDraggingProgress = true, {passive: true});
         
         progressSlider.addEventListener('input', () => {
-            // 拖动过程中只更新时间文本显示，不直接改 player 进度（防止卡顿）
-            if (player.duration) {
+            if (player.duration && !isNaN(player.duration)) {
                 const targetTime = (progressSlider.value / 100) * player.duration;
                 timeDisplay.textContent = `${formatTime(targetTime)} / ${formatTime(player.duration)}`;
             }
         });
 
         const updatePlayerTime = () => {
-            if (player.duration) {
+            if (player.duration && !isNaN(player.duration)) {
                 player.currentTime = (progressSlider.value / 100) * player.duration;
             }
-            isDraggingProgress = false; // 拖动结束，恢复自动更新
+            isDraggingProgress = false;
         };
         progressSlider.addEventListener('mouseup', updatePlayerTime);
         progressSlider.addEventListener('touchend', updatePlayerTime);
 
-        // 播放速度控制 (双向绑定)
         speedSlider.addEventListener('input', (e) => {
-            const speed = parseFloat(e.target.value);
-            player.playbackRate = speed;
-            speedInput.value = speed;
+            player.playbackRate = parseFloat(e.target.value);
+            speedInput.value = e.target.value;
         });
         speedInput.addEventListener('input', (e) => {
             let speed = parseFloat(e.target.value);
             if (isNaN(speed)) return;
-            // 限制范围
             if (speed < 0.25) speed = 0.25;
             if (speed > 3) speed = 3;
             player.playbackRate = speed;
             speedSlider.value = speed;
         });
 
-        // 音量控制
-        volumeSlider.addEventListener('input', (e) => {
-            player.volume = e.target.value;
-        });
+        volumeSlider.addEventListener('input', (e) => { player.volume = e.target.value; });
 
-        // -------------------------
-        // 3. UI 面板切换与动画
-        // -------------------------
         togglePanelBtn.addEventListener('click', () => {
             settingsPanel.classList.toggle('hidden');
-            
-            // 切换按钮图标与样式
             if (settingsPanel.classList.contains('hidden')) {
                 togglePanelBtn.textContent = '↑';
                 togglePanelBtn.classList.add('rotated');
@@ -374,53 +390,59 @@
             }
         });
 
-        // 触发百分比跳动动画
         function triggerPercentAnimation() {
             miniPercent.classList.remove('pop-anim');
-            // 强制浏览器重绘，以便重新触发动画
             void miniPercent.offsetWidth; 
             miniPercent.classList.add('pop-anim');
         }
 
         // -------------------------
-        // 4. 计步器与实时动态播放系统
+        // 3. 计步器与自动播放解锁系统
         // -------------------------
-        
-        // 当产生步数时触发播放
         function handleStepDetected() {
             stepCount++;
             stepCounterDisplay.textContent = stepCount;
             
-            // 尝试播放 (需要用户至少交互过一次页面)
             if (player.src && player.paused) {
-                player.play().catch(err => {
-                    console.log("浏览器阻止了自动播放，请先点击页面任意位置", err);
-                });
+                // 尝试播放
+                let playPromise = player.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(err => {
+                        // 【修复BUG】: 捕获浏览器拦截事件，并弹出遮罩层让用户点击
+                        if (!playRejected) {
+                            playRejected = true;
+                            unlockOverlay.classList.remove('hidden');
+                        }
+                    });
+                }
             }
 
-            // 刷新停止播放的倒计时
             clearTimeout(playTimeout);
             playTimeout = setTimeout(() => {
                 player.pause();
             }, PLAY_DURATION);
         }
 
-        // 运动传感器核心算法
+        // 【修复BUG】: 当用户点击全屏遮罩层时，系统会认可这是一次"人类操作"，自动解除限制
+        unlockOverlay.addEventListener('click', () => {
+            unlockOverlay.classList.add('hidden');
+            if (player.src) {
+                player.play().then(() => {
+                    player.pause(); // 马上暂停，等下一步继续走的时候播放
+                    playRejected = false;
+                }).catch(console.error);
+            }
+        });
+
         function handleMotion(event) {
-            // 获取包含重力的加速度数据
             let acc = event.accelerationIncludingGravity;
             if (!acc || acc.x === null) return;
 
-            // 计算三轴加速度矢量和
             let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-            
-            // 消除标准重力 (约 9.8 m/s²) 的影响
             let delta = Math.abs(magnitude - 9.8);
 
-            // 如果加速度变化超过阈值，判定为正在运动
             if (delta > STEP_THRESHOLD) {
                 let now = Date.now();
-                // 冷却时间，防止同一次震动被多次计算
                 if (now - lastStepTime > STEP_COOLDOWN) {
                     lastStepTime = now;
                     handleStepDetected();
@@ -428,7 +450,6 @@
             }
         }
 
-        // 请求权限 (适配 iOS 13+ 策略)
         authBtn.addEventListener('click', () => {
             if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
                 DeviceMotionEvent.requestPermission()
@@ -443,13 +464,11 @@
                     })
                     .catch(console.error);
             } else {
-                // Android 或老版本 iOS
                 window.addEventListener('devicemotion', handleMotion);
                 authBtn.textContent = "已开启计步";
                 authBtn.style.background = "var(--primary)";
             }
         });
-
     </script>
 </body>
 </html>
