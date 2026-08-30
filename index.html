@@ -176,36 +176,38 @@
             color: var(--primary);
         }
 
-        /* 核心修复：防浏览器拦截的解锁遮罩层 */
+        /* 强制用户交互的全屏解锁层 */
         #unlockOverlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.85);
+            background: rgba(0, 0, 0, 0.9);
             z-index: 9999;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             color: #4CAF50;
-            font-size: 20px;
+            font-size: 22px;
             font-weight: bold;
             text-align: center;
             padding: 20px;
             cursor: pointer;
+            transition: opacity 0.3s;
         }
         #unlockOverlay.hidden {
-            display: none;
+            opacity: 0;
+            pointer-events: none;
         }
-        #unlockOverlay span {
+        #unlockSub {
             font-size: 14px;
-            color: #ccc;
-            margin-top: 10px;
+            color: #aaa;
+            margin-top: 15px;
+            font-weight: normal;
         }
     </style>
 </head>
 <body>
 
-    <!-- 媒体容器 (加上了 preload="auto" 强制预加载元数据) -->
     <div id="mediaContainer">
         <video id="player" playsinline preload="auto"></video>
     </div>
@@ -218,10 +220,11 @@
         <div id="miniPercent">0%</div>
     </div>
 
-    <!-- 自动播放解锁遮罩 (默认隐藏) -->
+    <!-- 强制交互解锁遮罩层 -->
     <div id="unlockOverlay" class="hidden">
-        ⚠️ 浏览器拦截了自动播放
-        <span>（请随便点击屏幕任意位置，解除系统限制）</span>
+        <span id="unlockIcon" style="font-size: 48px; margin-bottom: 20px;">▶️</span>
+        <div id="unlockTitle">资源加载完毕</div>
+        <div id="unlockSub">点击屏幕任意位置，激活计步播放</div>
     </div>
 
     <!-- 设置面板 -->
@@ -271,7 +274,11 @@
         const miniPercent = document.getElementById('miniPercent');
         const authBtn = document.getElementById('authBtn');
         const stepCounterDisplay = document.getElementById('stepCounterDisplay');
+        
         const unlockOverlay = document.getElementById('unlockOverlay');
+        const unlockIcon = document.getElementById('unlockIcon');
+        const unlockTitle = document.getElementById('unlockTitle');
+        const unlockSub = document.getElementById('unlockSub');
 
         let isDraggingProgress = false;
         let lastPercentInt = -1;
@@ -279,13 +286,16 @@
         let lastStepTime = 0;
         let playTimeout = null;
         let objectUrl = null;
-        let playRejected = false; // 记录是否被浏览器拦截
 
         const STEP_THRESHOLD = 1.2;
         const STEP_COOLDOWN = 400;
         const PLAY_DURATION = 2000;
 
-        // 格式化时间 (加入对 NaN 的判断，防止 00:00 BUG)
+        // 安全播放状态管理（解决 AbortError 的核心）
+        let isPrimed = false; // 是否已经通过点击解锁
+        let isPlayPromiseActive = false; // play() 是否正在处理中
+        let pendingPause = false; // 是否在 play() 处理中途接到了 pause() 请求
+
         function formatTime(seconds) {
             if (isNaN(seconds) || !isFinite(seconds)) return "00:00";
             const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -293,9 +303,14 @@
             return `${m}:${s}`;
         }
 
-        // -------------------------
-        // 1. 本地文件上传逻辑
-        // -------------------------
+        function showOverlay(title, sub, icon) {
+            unlockTitle.innerText = title;
+            unlockSub.innerText = sub;
+            unlockIcon.innerText = icon;
+            unlockOverlay.classList.remove('hidden');
+        }
+
+        // 1. 上传文件逻辑
         mediaUpload.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -303,7 +318,7 @@
             if (objectUrl) URL.revokeObjectURL(objectUrl);
             objectUrl = URL.createObjectURL(file);
             player.src = objectUrl;
-            player.load(); // 触发加载
+            player.load();
             
             stepCount = 0;
             stepCounterDisplay.textContent = stepCount;
@@ -311,19 +326,108 @@
             miniPercent.textContent = "0%";
             miniProgressBar.style.width = "0%";
             progressSlider.value = 0;
+
+            // 核心：强制要求重新进行交互解锁
+            isPrimed = false;
+            showOverlay("✅ 资源已就绪", "点击屏幕任意位置激活计步播放", "▶️");
         });
 
-        // 【修复BUG】: 只要获取到了媒体的元数据，立刻更新总时长显示，解决全是 00:00 的问题
+        // 2. 强制解锁逻辑
+        unlockOverlay.addEventListener('click', () => {
+            if (!player.src) return;
+            
+            // 尝试播放并立即暂停，以此彻底获取系统的播放白名单
+            const playPromise = player.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    player.pause();
+                    isPrimed = true;
+                    unlockOverlay.classList.add('hidden');
+                }).catch(err => {
+                    console.error("解锁失败:", err);
+                    showOverlay("❌ 激活失败", "请再点一次屏幕重试", "⚠️");
+                });
+            }
+        });
+
         player.addEventListener('loadedmetadata', () => {
             timeDisplay.textContent = `00:00 / ${formatTime(player.duration)}`;
         });
 
-        // -------------------------
-        // 2. 媒体控制逻辑
-        // -------------------------
+        // 3. 安全的播放控制机制
+        function safePlay() {
+            if (!isPrimed || !player.src) return; // 未解锁时不处理
+            if (isPlayPromiseActive || !player.paused) return; // 正在处理或已播放时不处理
+            
+            pendingPause = false;
+            isPlayPromiseActive = true;
+            
+            const playPromise = player.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    isPlayPromiseActive = false;
+                    // 如果在等待播放成功期间，触发了暂停指令，那么现在执行暂停
+                    if (pendingPause) {
+                        player.pause();
+                        pendingPause = false;
+                    }
+                }).catch(err => {
+                    isPlayPromiseActive = false;
+                    if (err.name === 'NotAllowedError') {
+                        isPrimed = false; // 权限被系统回收，重新要求解锁
+                        showOverlay("⚠️ 播放被拦截", "浏览器限制了自动播放，请点击解除", "⚠️");
+                    }
+                });
+            } else {
+                isPlayPromiseActive = false;
+            }
+        }
+
+        function safePause() {
+            // 如果 play() 正在异步加载中，不能直接调 pause()，否则会触发致命 AbortError
+            if (isPlayPromiseActive) {
+                pendingPause = true; // 挂起暂停指令，等 play 完成后立刻执行
+                return;
+            }
+            if (!player.paused) {
+                player.pause();
+            }
+        }
+
+        // 4. 计步与计时器调度
+        function handleStepDetected() {
+            if (!isPrimed) return; // 没有解锁前，即使有步数也不尝试播放
+
+            stepCount++;
+            stepCounterDisplay.textContent = stepCount;
+            
+            safePlay(); // 触发安全播放
+
+            clearTimeout(playTimeout);
+            playTimeout = setTimeout(() => {
+                safePause(); // 触发安全暂停
+            }, PLAY_DURATION);
+        }
+
+        function handleMotion(event) {
+            let acc = event.accelerationIncludingGravity;
+            if (!acc || acc.x === null) return;
+
+            let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+            let delta = Math.abs(magnitude - 9.8);
+
+            if (delta > STEP_THRESHOLD) {
+                let now = Date.now();
+                if (now - lastStepTime > STEP_COOLDOWN) {
+                    lastStepTime = now;
+                    handleStepDetected();
+                }
+            }
+        }
+
+        // 5. 界面与其他逻辑 (UI控件同步)
         player.addEventListener('timeupdate', () => {
             if (!player.duration || isNaN(player.duration)) return;
-            
             const current = player.currentTime;
             const duration = player.duration;
             const percent = (current / duration) * 100;
@@ -334,7 +438,6 @@
             }
 
             miniProgressBar.style.width = `${percent}%`;
-            
             const currentPercentInt = Math.floor(percent);
             if (currentPercentInt > lastPercentInt && currentPercentInt > 0) {
                 miniPercent.textContent = `${currentPercentInt}%`;
@@ -345,14 +448,12 @@
 
         progressSlider.addEventListener('mousedown', () => isDraggingProgress = true);
         progressSlider.addEventListener('touchstart', () => isDraggingProgress = true, {passive: true});
-        
         progressSlider.addEventListener('input', () => {
             if (player.duration && !isNaN(player.duration)) {
                 const targetTime = (progressSlider.value / 100) * player.duration;
                 timeDisplay.textContent = `${formatTime(targetTime)} / ${formatTime(player.duration)}`;
             }
         });
-
         const updatePlayerTime = () => {
             if (player.duration && !isNaN(player.duration)) {
                 player.currentTime = (progressSlider.value / 100) * player.duration;
@@ -374,7 +475,6 @@
             player.playbackRate = speed;
             speedSlider.value = speed;
         });
-
         volumeSlider.addEventListener('input', (e) => { player.volume = e.target.value; });
 
         togglePanelBtn.addEventListener('click', () => {
@@ -396,60 +496,6 @@
             miniPercent.classList.add('pop-anim');
         }
 
-        // -------------------------
-        // 3. 计步器与自动播放解锁系统
-        // -------------------------
-        function handleStepDetected() {
-            stepCount++;
-            stepCounterDisplay.textContent = stepCount;
-            
-            if (player.src && player.paused) {
-                // 尝试播放
-                let playPromise = player.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(err => {
-                        // 【修复BUG】: 捕获浏览器拦截事件，并弹出遮罩层让用户点击
-                        if (!playRejected) {
-                            playRejected = true;
-                            unlockOverlay.classList.remove('hidden');
-                        }
-                    });
-                }
-            }
-
-            clearTimeout(playTimeout);
-            playTimeout = setTimeout(() => {
-                player.pause();
-            }, PLAY_DURATION);
-        }
-
-        // 【修复BUG】: 当用户点击全屏遮罩层时，系统会认可这是一次"人类操作"，自动解除限制
-        unlockOverlay.addEventListener('click', () => {
-            unlockOverlay.classList.add('hidden');
-            if (player.src) {
-                player.play().then(() => {
-                    player.pause(); // 马上暂停，等下一步继续走的时候播放
-                    playRejected = false;
-                }).catch(console.error);
-            }
-        });
-
-        function handleMotion(event) {
-            let acc = event.accelerationIncludingGravity;
-            if (!acc || acc.x === null) return;
-
-            let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-            let delta = Math.abs(magnitude - 9.8);
-
-            if (delta > STEP_THRESHOLD) {
-                let now = Date.now();
-                if (now - lastStepTime > STEP_COOLDOWN) {
-                    lastStepTime = now;
-                    handleStepDetected();
-                }
-            }
-        }
-
         authBtn.addEventListener('click', () => {
             if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
                 DeviceMotionEvent.requestPermission()
@@ -459,10 +505,9 @@
                             authBtn.textContent = "已授权计步";
                             authBtn.style.background = "var(--primary)";
                         } else {
-                            alert("计步权限被拒绝！请在系统设置中允许。");
+                            alert("计步权限被拒绝！");
                         }
-                    })
-                    .catch(console.error);
+                    }).catch(console.error);
             } else {
                 window.addEventListener('devicemotion', handleMotion);
                 authBtn.textContent = "已开启计步";
