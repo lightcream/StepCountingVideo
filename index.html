@@ -2,517 +2,355 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>计步奖励播放系统</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>步频驱动奖励多媒体系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root {
-            --primary: #4CAF50;
-            --bg-color: #121212;
-            --panel-bg: rgba(30, 30, 30, 0.9);
-            --text-color: #ffffff;
+        /* 进度数字跳动动画 */
+        @keyframes pulseNum {
+            0% { transform: scale(1); color: #60a5fa; }
+            50% { transform: scale(1.25); color: #34d399; }
+            100% { transform: scale(1); color: #60a5fa; }
         }
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* 媒体播放区域 */
-        #mediaContainer {
-            flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-            width: 100%;
-        }
-        video {
-            max-width: 100%;
-            max-height: 100%;
-            display: block;
-        }
-
-        /* 底部隐藏状态栏 */
-        #miniStatusBar {
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-            z-index: 10;
-        }
-        #miniStatusBar.show {
-            opacity: 1;
-        }
-        #miniProgressBg {
-            flex: 1;
-            height: 3px;
-            background: rgba(255, 255, 255, 0.2);
-            margin: 0 10px;
-            border-radius: 2px;
-            position: relative;
-        }
-        #miniProgressBar {
-            position: absolute;
-            left: 0;
-            top: 0;
-            height: 100%;
-            background: var(--primary);
-            width: 0%;
-            border-radius: 2px;
-        }
-        #miniPercent {
-            font-size: 12px;
-            margin-right: 10px;
-            font-weight: bold;
-            color: var(--primary);
+        .animate-number {
             display: inline-block;
+            animation: pulseNum 0.3s ease-in-out;
         }
-
-        /* 百分比动画 */
-        @keyframes percentPop {
-            0% { transform: scale(1); color: var(--primary); }
-            50% { transform: scale(1.5); color: #81C784; text-shadow: 0 0 8px #81C784; }
-            100% { transform: scale(1); color: var(--primary); }
-        }
-        .pop-anim {
-            animation: percentPop 0.4s ease-out;
-        }
-
-        /* 设置面板 */
-        #settingsPanel {
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            background: var(--panel-bg);
-            backdrop-filter: blur(10px);
-            border-top-left-radius: 15px;
-            border-top-right-radius: 15px;
-            padding: 20px;
-            box-sizing: border-box;
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            z-index: 20;
-        }
-        #settingsPanel.hidden {
-            transform: translateY(100%);
-        }
-
-        /* 悬浮按钮 */
-        #togglePanelBtn {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            font-size: 24px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            cursor: pointer;
-            z-index: 30;
-            transition: transform 0.3s;
-        }
-        #togglePanelBtn.rotated {
-            transform: rotate(180deg);
-            background: #555;
-            bottom: 30px;
-        }
-
-        /* 面板控件 */
-        .control-group {
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .control-group label {
-            flex: 1;
-            font-size: 14px;
-        }
-        input[type="range"] {
-            flex: 2;
-            accent-color: var(--primary);
-        }
-        input[type="number"] {
-            width: 60px;
-            margin-left: 10px;
-            background: #333;
-            color: white;
-            border: 1px solid #555;
-            border-radius: 4px;
-            padding: 4px;
-            text-align: center;
-        }
-        input[type="file"] {
-            width: 100%;
-            margin-top: 5px;
-            color: #ccc;
-        }
-        .btn-auth {
-            background: #2196F3;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        #stepCounterDisplay {
-            font-size: 24px;
-            font-weight: bold;
-            color: var(--primary);
-        }
-
-        /* 强制用户交互的全屏解锁层 */
-        #unlockOverlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: #4CAF50;
-            font-size: 22px;
-            font-weight: bold;
-            text-align: center;
-            padding: 20px;
-            cursor: pointer;
-            transition: opacity 0.3s;
-        }
-        #unlockOverlay.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        #unlockSub {
-            font-size: 14px;
-            color: #aaa;
-            margin-top: 15px;
-            font-weight: normal;
-        }
+        /* 自定义滚动条美化 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
     </style>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between overflow-x-hidden select-none">
 
-    <div id="mediaContainer">
-        <video id="player" playsinline preload="auto"></video>
+    <main class="flex-grow flex flex-col items-center justify-center p-4 relative pb-28">
+        <div id="mediaContainer" class="w-full max-w-4xl bg-black rounded-2xl overflow-hidden shadow-2xl relative flex items-center justify-center aspect-video border border-slate-800">
+            <div id="placeholder" class="text-center p-8 text-slate-500">
+                <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                <p class="text-lg font-medium">请在下方控制面板上传您的音视频文件</p>
+                <p class="text-sm text-slate-600 mt-1">支持 MP4, WebM, MP3, WAV 等主流格式</p>
+            </div>
+            <video id="mediaPlayer" class="w-full h-full object-contain hidden" playsinline></video>
+        </div>
+
+        <div id="statusNotice" class="absolute top-6 bg-slate-900/80 backdrop-blur-md border border-slate-700 px-4 py-2 rounded-full text-sm flex items-center space-x-2 shadow-lg transition-all duration-300">
+            <span id="statusDot" class="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span>
+            <span id="statusText">等待计步启动：请开始走动或使用测试按钮</span>
+        </div>
+    </main>
+
+    <div id="miniBarContainer" class="fixed bottom-0 left-0 w-full h-1.5 bg-slate-800 z-40 hidden cursor-pointer">
+        <div id="miniProgressBar" class="h-full bg-gradient-to-r from-blue-500 to-emerald-400 w-0 transition-all duration-100"></div>
     </div>
 
-    <!-- 极简底部状态栏 -->
-    <div id="miniStatusBar">
-        <div id="miniProgressBg">
-            <div id="miniProgressBar"></div>
-        </div>
-        <div id="miniPercent">0%</div>
-    </div>
+    <footer id="settingsPanel" class="fixed bottom-0 left-0 w-full bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 z-50 transition-transform duration-300 shadow-2xl">
+        <button id="togglePanelBtn" class="absolute -top-10 right-6 bg-slate-900 border-t border-x border-slate-800 px-4 py-1.5 rounded-t-xl text-xs font-semibold text-slate-400 hover:text-white flex items-center space-x-1.5 shadow-md">
+            <svg id="toggleIcon" class="w-4 h-4 transition-transform duration-300 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+            <span id="toggleText">隐藏设置面板</span>
+        </button>
 
-    <!-- 强制交互解锁遮罩层 -->
-    <div id="unlockOverlay" class="hidden">
-        <span id="unlockIcon" style="font-size: 48px; margin-bottom: 20px;">▶️</span>
-        <div id="unlockTitle">资源加载完毕</div>
-        <div id="unlockSub">点击屏幕任意位置，激活计步播放</div>
-    </div>
+        <div class="max-w-6xl mx-auto p-4 md:p-6 space-y-4">
+            
+            <div class="space-y-1">
+                <div class="flex justify-between text-xs text-slate-400 font-mono">
+                    <span id="currentTimeText">00:00</span>
+                    <div class="flex items-center space-x-1">
+                        <span>已看进度：</span>
+                        <span id="progressPercentNum" class="font-bold text-blue-400">0%</span>
+                    </div>
+                    <span id="durationText">00:00</span>
+                </div>
+                <input id="mainProgressBar" type="range" min="0" max="100" value="0" step="0.1" 
+                    class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 focus:outline-none">
+            </div>
 
-    <!-- 设置面板 -->
-    <div id="settingsPanel">
-        <div class="control-group">
-            <label>步数统计: <span id="stepCounterDisplay">0</span> 步</label>
-            <button class="btn-auth" id="authBtn">授权计步权限</button>
-        </div>
-        
-        <div class="control-group">
-            <label>上传媒体 (音/视频)</label>
-            <input type="file" id="mediaUpload" accept="video/*,audio/*">
-        </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center pt-2 border-t border-slate-800/80">
+                
+                <div class="flex items-center space-x-2">
+                    <label class="flex-grow bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-2 px-3 rounded-lg cursor-pointer text-center transition shadow-md truncate">
+                        📁 选择音视频文件
+                        <input id="fileInput" type="file" accept="video/*,audio/*" class="hidden">
+                    </label>
+                </div>
 
-        <div class="control-group">
-            <label>播放进度</label>
-            <input type="range" id="progressSlider" min="0" max="100" value="0" step="0.1">
-            <span id="timeDisplay" style="margin-left: 10px; font-size: 12px; width: 80px; text-align: right;">00:00 / 00:00</span>
-        </div>
+                <div class="flex items-center justify-between bg-slate-800/60 px-3 py-2 rounded-lg border border-slate-700/50">
+                    <div class="text-xs">
+                        <div class="text-slate-400">实时步数: <span id="stepCountDisplay" class="text-emerald-400 font-bold text-sm">0</span></div>
+                        <div class="text-[10px] text-slate-500" id="permissionStatus">未请求传感器权限</div>
+                    </div>
+                    <div class="flex space-x-1">
+                        <button id="reqPermissionBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] px-2.5 py-1.5 rounded transition">授权计步</button>
+                        <button id="simStepBtn" class="bg-amber-600 hover:bg-amber-500 text-white text-[10px] px-2.5 py-1.5 rounded transition" title="电脑测试点击模拟步数">+1步测试</button>
+                    </div>
+                </div>
 
-        <div class="control-group">
-            <label>播放速度</label>
-            <input type="range" id="speedSlider" min="0.25" max="3" value="1" step="0.05">
-            <input type="number" id="speedInput" min="0.25" max="3" value="1" step="0.05">
-        </div>
+                <div class="flex items-center space-x-3 bg-slate-800/60 px-3 py-2 rounded-lg border border-slate-700/50">
+                    <span class="text-xs text-slate-400">音量</span>
+                    <input id="volumeSlider" type="range" min="0" max="1" value="1" step="0.05" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-400">
+                    <span id="volumeText" class="text-xs font-mono w-8 text-right">100%</span>
+                </div>
 
-        <div class="control-group">
-            <label>音量大小</label>
-            <input type="range" id="volumeSlider" min="0" max="1" value="1" step="0.01">
-        </div>
-    </div>
+                <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-2 rounded-lg border border-slate-700/50">
+                    <span class="text-xs text-slate-400">倍速</span>
+                    <input id="speedSlider" type="range" min="0.25" max="3" value="1" step="0.05" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-400">
+                    <input id="speedInput" type="number" min="0.25" max="5" value="1" step="0.1" class="w-14 bg-slate-900 border border-slate-700 text-center text-xs rounded py-1 text-white focus:outline-none focus:border-blue-500 font-mono">
+                </div>
 
-    <button id="togglePanelBtn">↓</button>
+            </div>
+        </div>
+    </footer>
 
     <script>
-        const player = document.getElementById('player');
-        const mediaUpload = document.getElementById('mediaUpload');
-        const progressSlider = document.getElementById('progressSlider');
-        const timeDisplay = document.getElementById('timeDisplay');
+        const mediaElement = document.getElementById('mediaPlayer');
+        const fileInput = document.getElementById('fileInput');
+        const placeholder = document.getElementById('placeholder');
+        const mainProgressBar = document.getElementById('mainProgressBar');
+        const miniProgressBar = document.getElementById('miniProgressBar');
+        const miniBarContainer = document.getElementById('miniBarContainer');
+        const currentTimeText = document.getElementById('currentTimeText');
+        const durationText = document.getElementById('durationText');
+        const progressPercentNum = document.getElementById('progressPercentNum');
+        
+        const volumeSlider = document.getElementById('volumeSlider');
+        const volumeText = document.getElementById('volumeText');
         const speedSlider = document.getElementById('speedSlider');
         const speedInput = document.getElementById('speedInput');
-        const volumeSlider = document.getElementById('volumeSlider');
+
         const settingsPanel = document.getElementById('settingsPanel');
         const togglePanelBtn = document.getElementById('togglePanelBtn');
-        const miniStatusBar = document.getElementById('miniStatusBar');
-        const miniProgressBar = document.getElementById('miniProgressBar');
-        const miniPercent = document.getElementById('miniPercent');
-        const authBtn = document.getElementById('authBtn');
-        const stepCounterDisplay = document.getElementById('stepCounterDisplay');
-        
-        const unlockOverlay = document.getElementById('unlockOverlay');
-        const unlockIcon = document.getElementById('unlockIcon');
-        const unlockTitle = document.getElementById('unlockTitle');
-        const unlockSub = document.getElementById('unlockSub');
+        const toggleIcon = document.getElementById('toggleIcon');
+        const toggleText = document.getElementById('toggleText');
 
-        let isDraggingProgress = false;
-        let lastPercentInt = -1;
+        const stepCountDisplay = document.getElementById('stepCountDisplay');
+        const reqPermissionBtn = document.getElementById('reqPermissionBtn');
+        const simStepBtn = document.getElementById('simStepBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const permissionStatus = document.getElementById('permissionStatus');
+
         let stepCount = 0;
-        let lastStepTime = 0;
-        let playTimeout = null;
-        let objectUrl = null;
+        let lastStepTime = Date.now();
+        let isPlayingAllowed = false;
+        let hasSource = false;
+        let isUserDragging = false;
+        let lastAnimatedPercent = 0;
 
-        const STEP_THRESHOLD = 1.2;
-        const STEP_COOLDOWN = 400;
-        const PLAY_DURATION = 2000;
-
-        // 安全播放状态管理（解决 AbortError 的核心）
-        let isPrimed = false; // 是否已经通过点击解锁
-        let isPlayPromiseActive = false; // play() 是否正在处理中
-        let pendingPause = false; // 是否在 play() 处理中途接到了 pause() 请求
-
+        // 格式化时间函数
         function formatTime(seconds) {
-            if (isNaN(seconds) || !isFinite(seconds)) return "00:00";
-            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-            return `${m}:${s}`;
+            if (isNaN(seconds)) return "00:00";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
         }
 
-        function showOverlay(title, sub, icon) {
-            unlockTitle.innerText = title;
-            unlockSub.innerText = sub;
-            unlockIcon.innerText = icon;
-            unlockOverlay.classList.remove('hidden');
-        }
-
-        // 1. 上传文件逻辑
-        mediaUpload.addEventListener('change', function(e) {
+        // 1. 资源上传与更改
+        fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
-            if (objectUrl) URL.revokeObjectURL(objectUrl);
-            objectUrl = URL.createObjectURL(file);
-            player.src = objectUrl;
-            player.load();
-            
+            const fileURL = URL.createObjectURL(file);
+            mediaElement.src = fileURL;
+            mediaElement.classList.remove('hidden');
+            placeholder.style.display = 'none';
+            hasSource = true;
+            mediaElement.load();
+            mediaElement.pause();
             stepCount = 0;
-            stepCounterDisplay.textContent = stepCount;
-            lastPercentInt = -1;
-            miniPercent.textContent = "0%";
-            miniProgressBar.style.width = "0%";
-            progressSlider.value = 0;
-
-            // 核心：强制要求重新进行交互解锁
-            isPrimed = false;
-            showOverlay("✅ 资源已就绪", "点击屏幕任意位置激活计步播放", "▶️");
+            stepCountDisplay.textContent = stepCount;
+            updateStatus(false, "已加载新资源，请开始走动或点击测试按钮以播放");
         });
 
-        // 2. 强制解锁逻辑
-        unlockOverlay.addEventListener('click', () => {
-            if (!player.src) return;
+        // 2. 计步逻辑与传感器接入
+        function addStep(amount = 1) {
+            stepCount += amount;
+            stepCountDisplay.textContent = stepCount;
+            lastStepTime = Date.now();
             
-            // 尝试播放并立即暂停，以此彻底获取系统的播放白名单
-            const playPromise = player.play();
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    player.pause();
-                    isPrimed = true;
-                    unlockOverlay.classList.add('hidden');
-                }).catch(err => {
-                    console.error("解锁失败:", err);
-                    showOverlay("❌ 激活失败", "请再点一次屏幕重试", "⚠️");
-                });
+            // 触发奖励条件：步数上涨，允许播放
+            if (hasSource && mediaElement.paused) {
+                mediaElement.play().catch(err => console.log("自动播放限制:", err));
             }
-        });
+            updateStatus(true, "步数上涨中：奖励资源正常播放");
 
-        player.addEventListener('loadedmetadata', () => {
-            timeDisplay.textContent = `00:00 / ${formatTime(player.duration)}`;
-        });
-
-        // 3. 安全的播放控制机制
-        function safePlay() {
-            if (!isPrimed || !player.src) return; // 未解锁时不处理
-            if (isPlayPromiseActive || !player.paused) return; // 正在处理或已播放时不处理
-            
-            pendingPause = false;
-            isPlayPromiseActive = true;
-            
-            const playPromise = player.play();
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    isPlayPromiseActive = false;
-                    // 如果在等待播放成功期间，触发了暂停指令，那么现在执行暂停
-                    if (pendingPause) {
-                        player.pause();
-                        pendingPause = false;
-                    }
-                }).catch(err => {
-                    isPlayPromiseActive = false;
-                    if (err.name === 'NotAllowedError') {
-                        isPrimed = false; // 权限被系统回收，重新要求解锁
-                        showOverlay("⚠️ 播放被拦截", "浏览器限制了自动播放，请点击解除", "⚠️");
-                    }
-                });
-            } else {
-                isPlayPromiseActive = false;
-            }
-        }
-
-        function safePause() {
-            // 如果 play() 正在异步加载中，不能直接调 pause()，否则会触发致命 AbortError
-            if (isPlayPromiseActive) {
-                pendingPause = true; // 挂起暂停指令，等 play 完成后立刻执行
-                return;
-            }
-            if (!player.paused) {
-                player.pause();
-            }
-        }
-
-        // 4. 计步与计时器调度
-        function handleStepDetected() {
-            if (!isPrimed) return; // 没有解锁前，即使有步数也不尝试播放
-
-            stepCount++;
-            stepCounterDisplay.textContent = stepCount;
-            
-            safePlay(); // 触发安全播放
-
-            clearTimeout(playTimeout);
-            playTimeout = setTimeout(() => {
-                safePause(); // 触发安全暂停
-            }, PLAY_DURATION);
-        }
-
-        function handleMotion(event) {
-            let acc = event.accelerationIncludingGravity;
-            if (!acc || acc.x === null) return;
-
-            let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-            let delta = Math.abs(magnitude - 9.8);
-
-            if (delta > STEP_THRESHOLD) {
-                let now = Date.now();
-                if (now - lastStepTime > STEP_COOLDOWN) {
-                    lastStepTime = now;
-                    handleStepDetected();
+            // 检查百分比数字动画
+            if (mediaElement.duration) {
+                const percent = Math.floor((mediaElement.currentTime / mediaElement.duration) * 100);
+                if (percent !== lastAnimatedPercent) {
+                    lastAnimatedPercent = percent;
+                    triggerPercentAnimation(percent);
                 }
             }
         }
 
-        // 5. 界面与其他逻辑 (UI控件同步)
-        player.addEventListener('timeupdate', () => {
-            if (!player.duration || isNaN(player.duration)) return;
-            const current = player.currentTime;
-            const duration = player.duration;
-            const percent = (current / duration) * 100;
-            
-            if (!isDraggingProgress) {
-                progressSlider.value = percent;
-                timeDisplay.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
-            }
-
-            miniProgressBar.style.width = `${percent}%`;
-            const currentPercentInt = Math.floor(percent);
-            if (currentPercentInt > lastPercentInt && currentPercentInt > 0) {
-                miniPercent.textContent = `${currentPercentInt}%`;
-                triggerPercentAnimation();
-                lastPercentInt = currentPercentInt;
-            }
-        });
-
-        progressSlider.addEventListener('mousedown', () => isDraggingProgress = true);
-        progressSlider.addEventListener('touchstart', () => isDraggingProgress = true, {passive: true});
-        progressSlider.addEventListener('input', () => {
-            if (player.duration && !isNaN(player.duration)) {
-                const targetTime = (progressSlider.value / 100) * player.duration;
-                timeDisplay.textContent = `${formatTime(targetTime)} / ${formatTime(player.duration)}`;
-            }
-        });
-        const updatePlayerTime = () => {
-            if (player.duration && !isNaN(player.duration)) {
-                player.currentTime = (progressSlider.value / 100) * player.duration;
-            }
-            isDraggingProgress = false;
-        };
-        progressSlider.addEventListener('mouseup', updatePlayerTime);
-        progressSlider.addEventListener('touchend', updatePlayerTime);
-
-        speedSlider.addEventListener('input', (e) => {
-            player.playbackRate = parseFloat(e.target.value);
-            speedInput.value = e.target.value;
-        });
-        speedInput.addEventListener('input', (e) => {
-            let speed = parseFloat(e.target.value);
-            if (isNaN(speed)) return;
-            if (speed < 0.25) speed = 0.25;
-            if (speed > 3) speed = 3;
-            player.playbackRate = speed;
-            speedSlider.value = speed;
-        });
-        volumeSlider.addEventListener('input', (e) => { player.volume = e.target.value; });
-
-        togglePanelBtn.addEventListener('click', () => {
-            settingsPanel.classList.toggle('hidden');
-            if (settingsPanel.classList.contains('hidden')) {
-                togglePanelBtn.textContent = '↑';
-                togglePanelBtn.classList.add('rotated');
-                miniStatusBar.classList.add('show');
-            } else {
-                togglePanelBtn.textContent = '↓';
-                togglePanelBtn.classList.remove('rotated');
-                miniStatusBar.classList.remove('show');
-            }
-        });
-
-        function triggerPercentAnimation() {
-            miniPercent.classList.remove('pop-anim');
-            void miniPercent.offsetWidth; 
-            miniPercent.classList.add('pop-anim');
+        function triggerPercentAnimation(val) {
+            progressPercentNum.textContent = val + '%';
+            progressPercentNum.classList.remove('animate-number');
+            void progressPercentNum.offsetWidth; // 重绘触发动画
+            progressPercentNum.classList.add('animate-number');
         }
 
-        authBtn.addEventListener('click', () => {
-            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                DeviceMotionEvent.requestPermission()
-                    .then(permissionState => {
-                        if (permissionState === 'granted') {
-                            window.addEventListener('devicemotion', handleMotion);
-                            authBtn.textContent = "已授权计步";
-                            authBtn.style.background = "var(--primary)";
-                        } else {
-                            alert("计步权限被拒绝！");
-                        }
-                    }).catch(console.error);
+        function updateStatus(isActive, text) {
+            if (isActive) {
+                statusDot.className = "w-3 h-3 rounded-full bg-emerald-500 animate-pulse";
+                statusNotice.className = "absolute top-6 bg-slate-900/90 backdrop-blur-md border border-emerald-500/50 px-4 py-2 rounded-full text-sm flex items-center space-x-2 shadow-lg transition-all duration-300";
             } else {
-                window.addEventListener('devicemotion', handleMotion);
-                authBtn.textContent = "已开启计步";
-                authBtn.style.background = "var(--primary)";
+                statusDot.className = "w-3 h-3 rounded-full bg-rose-500 animate-pulse";
+                statusNotice.className = "absolute top-6 bg-slate-900/90 backdrop-blur-md border border-rose-500/50 px-4 py-2 rounded-full text-sm flex items-center space-x-2 shadow-lg transition-all duration-300";
             }
+            statusText.textContent = text;
+        }
+
+        // 检查无走动自动暂停保护 (超过 1.8 秒无新步数则暂停)
+        setInterval(() => {
+            if (hasSource && !mediaElement.paused) {
+                if (Date.now() - lastStepTime > 1800) {
+                    mediaElement.pause();
+                    updateStatus(false, "已停止走动：资源暂停，请继续保持计步！");
+                }
+            }
+        }, 200);
+
+        // 移动端重力感应计步算法
+        let lastAcc = { x: 0, y: 0, z: 0 };
+        let threshold = 1.2; // 灵敏度阈值
+
+        function handleMotion(event) {
+            const acc = event.accelerationIncludingGravity;
+            if (!acc) return;
+            const deltaX = Math.abs(acc.x - lastAcc.x);
+            const deltaY = Math.abs(acc.y - lastAcc.y);
+            const deltaZ = Math.abs(acc.z - lastAcc.z);
+
+            if ((deltaX + deltaY + deltaZ) > threshold) {
+                const now = Date.now();
+                if (now - lastStepTime > 300) { // 步频防抖
+                    addStep(1);
+                }
+            }
+            lastAcc = { x: acc.x, y: acc.y, z: acc.z };
+        }
+
+        reqPermissionBtn.addEventListener('click', () => {
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission().then(response => {
+                    if (response === 'granted') {
+                        window.addEventListener('devicemotion', handleMotion);
+                        permissionStatus.textContent = "传感器权限已授权";
+                        reqPermissionBtn.style.display = 'none';
+                    } else {
+                        permissionStatus.textContent = "权限被拒绝";
+                    }
+                }).catch(console.error);
+            } else if (window.DeviceMotionEvent) {
+                window.addEventListener('devicemotion', handleMotion);
+                permissionStatus.textContent = "设备已直接启用计步";
+                reqPermissionBtn.style.display = 'none';
+            } else {
+                permissionStatus.textContent = "当前设备不支持陀螺仪计步";
+            }
+        });
+
+        // 模拟步数按钮（电脑端或不方便走路时测试用）
+        simStepBtn.addEventListener('click', () => {
+            addStep(1);
+        });
+
+        // 3. 拖动进度条、音量、倍速控制
+        mediaElement.addEventListener('loadedmetadata', () => {
+            durationText.textContent = formatTime(mediaElement.duration);
+        });
+
+        mediaElement.addEventListener('timeupdate', () => {
+            if (!isUserDragging && mediaElement.duration) {
+                const current = mediaElement.currentTime;
+                const duration = mediaElement.duration;
+                const percent = (current / duration) * 100;
+                
+                mainProgressBar.value = percent;
+                miniProgressBar.style.width = percent + '%';
+                currentTimeText.textContent = formatTime(current);
+                
+                const percentInt = Math.floor(percent);
+                progressPercentNum.textContent = percentInt + '%';
+            }
+        });
+
+        // 拖动进度条事件（确保拖动过程流畅且不破坏状态）
+        mainProgressBar.addEventListener('mousedown', () => { isUserDragging = true; });
+        mainProgressBar.addEventListener('touchstart', () => { isUserDragging = true; });
+
+        mainProgressBar.addEventListener('input', (e) => {
+            if (!mediaElement.duration) return;
+            const val = parseFloat(e.target.value);
+            const targetTime = (val / 100) * mediaElement.duration;
+            currentTimeText.textContent = formatTime(targetTime);
+            miniProgressBar.style.width = val + '%';
+            progressPercentNum.textContent = Math.floor(val) + '%';
+        });
+
+        mainProgressBar.addEventListener('change', (e) => {
+            if (!mediaElement.duration) return;
+            const val = parseFloat(e.target.value);
+            const targetTime = (val / 100) * mediaElement.duration;
+            mediaElement.currentTime = targetTime;
+            isUserDragging = false;
+        });
+
+        // 音量调节
+        volumeSlider.addEventListener('input', (e) => {
+            const vol = parseFloat(e.target.value);
+            mediaElement.volume = vol;
+            volumeText.textContent = Math.round(vol * 100) + '%';
+        });
+
+        // 播放速度调节（滑块与输入框双向同步）
+        function updatePlaybackSpeed(speed) {
+            let s = parseFloat(speed);
+            if (isNaN(s)) s = 1;
+            s = Math.max(0.25, Math.min(5, s));
+            mediaElement.playbackRate = s;
+            speedSlider.value = s;
+            speedInput.value = s;
+        }
+
+        speedSlider.addEventListener('input', (e) => updatePlaybackSpeed(e.target.value));
+        speedInput.addEventListener('input', (e) => updatePlaybackSpeed(e.target.value));
+
+        // 键盘输入随时调整速度快捷键 (按 '[' 减速, ']' 加速)
+        window.addEventListener('keydown', (e) => {
+            if (document.activeElement === speedInput) return; // 如果正在输入框输入则不触发快捷键
+            let currentSpeed = parseFloat(mediaElement.playbackRate);
+            if (e.key === ']') {
+                updatePlaybackSpeed(currentSpeed + 0.1);
+            } else if (e.key === '[') {
+                updatePlaybackSpeed(currentSpeed - 0.1);
+            }
+        });
+
+        // 4. 开关隐藏设置面板与迷你进度条联动
+        let isPanelHidden = false;
+        togglePanelBtn.addEventListener('click', () => {
+            isPanelHidden = !isPanelHidden;
+            if (isPanelHidden) {
+                settingsPanel.style.transform = 'translateY(100%)';
+                toggleIcon.classList.remove('rotate-180');
+                toggleText.textContent = '显示设置面板';
+                miniBarContainer.classList.remove('hidden');
+            } else {
+                settingsPanel.style.transform = 'translateY(0)';
+                toggleIcon.classList.add('rotate-180');
+                toggleText.textContent = '隐藏设置面板';
+                miniBarContainer.classList.add('hidden');
+            }
+        });
+
+        // 点击底部的细线进度条也可以快速展开面板
+        miniBarContainer.addEventListener('click', () => {
+            togglePanelBtn.click();
         });
     </script>
 </body>
