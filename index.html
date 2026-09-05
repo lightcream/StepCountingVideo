@@ -444,10 +444,10 @@
 
         simStepBtn.addEventListener('click', () => registerStep());
 
-        // 步数静止监控 (2.5秒无行走自动暂停)
+        // 步数静止监控 (0.1秒无行走自动暂停)
         setInterval(() => {
             if (activeMedia && activeMedia.src && !activeMedia.paused) {
-                if (Date.now() - lastStepTime > 2500) {
+                if (Date.now() - lastStepTime > 100) {
                     activeMedia.pause();
                     playStatus.textContent = "停止步行 ➔ 自动暂停";
                     playStatus.className = "text-sm font-bold text-amber-400 mt-2";
