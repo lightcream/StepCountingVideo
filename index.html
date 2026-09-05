@@ -21,13 +21,55 @@
         .panel-transition {
             transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        /* 字幕专用描边与阴影样式，确保在任何画面背景下都清晰可见 */
+        /* 字幕专用描边与阴影样式 */
         .subtitle-text {
             text-shadow: 2px 2px 4px rgba(0,0,0,0.9),
                          -1px -1px 0 #000,  
                           1px -1px 0 #000,
                          -1px  1px 0 #000,
                           1px  1px 0 #000;
+        }
+
+        /* ----- 全屏状态下的专属样式 ----- */
+        #mediaContainer:fullscreen {
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            max-height: none;
+            border-radius: 0;
+            border: none;
+            background: #000;
+        }
+        #mediaContainer:-webkit-full-screen {
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            max-height: none;
+            border-radius: 0;
+            border: none;
+            background: #000;
+        }
+        /* 全屏时视频铺满并保持比例 */
+        #mediaContainer:fullscreen video {
+            max-height: 100vh !important;
+            height: 100%;
+        }
+        #mediaContainer:-webkit-full-screen video {
+            max-height: 100vh !important;
+            height: 100%;
+        }
+        /* 全屏时字幕稍微放大并自适应底部距离 */
+        #mediaContainer:fullscreen #subtitleOverlay {
+            bottom: 8%;
+        }
+        #mediaContainer:-webkit-full-screen #subtitleOverlay {
+            bottom: 8%;
+        }
+        #mediaContainer:fullscreen .subtitle-text {
+            font-size: 2.5rem;
+        }
+        #mediaContainer:-webkit-full-screen .subtitle-text {
+            font-size: 2.5rem;
         }
     </style>
 </head>
@@ -44,7 +86,6 @@
 
         <!-- 资源与字幕上传组件 -->
         <div class="w-full bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 shadow-xl backdrop-blur-md space-y-4 text-left">
-            <!-- 媒体文件上传 -->
             <div>
                 <label class="block text-sm font-medium text-slate-300 mb-2">1. 上传多媒体资源 (支持视频、音频)</label>
                 <input type="file" id="mediaUpload" accept="audio/*,video/*" 
@@ -60,19 +101,24 @@
             </div>
         </div>
 
-        <!-- 媒体展示区（包含字幕图层） -->
-        <div id="mediaContainer" class="relative w-full flex items-center justify-center bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl min-h-[220px]">
+        <!-- 媒体展示区（包含字幕图层，双击可全屏） -->
+        <div id="mediaContainer" class="relative w-full flex items-center justify-center bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl min-h-[220px] group cursor-pointer" title="双击可切换全屏">
             <!-- 占位提示 -->
-            <div id="mediaPlaceholder" class="text-slate-500 text-sm flex flex-col items-center space-y-2 p-8">
+            <div id="mediaPlaceholder" class="text-slate-500 text-sm flex flex-col items-center space-y-2 p-8 pointer-events-none">
                 <svg class="w-12 h-12 text-slate-600 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                 <span>请先在上方上传音频或视频资源</span>
             </div>
             <!-- 音视频DOM节点将挂载于此 -->
-            <div id="mediaContent" class="w-full h-full flex justify-center items-center"></div>
+            <div id="mediaContent" class="w-full h-full flex justify-center items-center pointer-events-none"></div>
 
             <!-- 字幕渲染图层 (绝对定位悬浮于画面上方) -->
             <div id="subtitleOverlay" class="absolute bottom-6 sm:bottom-10 w-full px-4 text-center pointer-events-none opacity-0 transition-opacity duration-200 z-10 flex flex-col items-center justify-end">
                 <span id="subtitleText" class="subtitle-text text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-wide"></span>
+            </div>
+            
+            <!-- 悬浮全屏提示图标（仅在 Hover 时显示） -->
+            <div class="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
             </div>
         </div>
 
@@ -136,18 +182,26 @@
             <div class="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-800/80">
                 <div class="flex items-center space-x-3">
                     <div class="text-xs text-slate-400">
-                        💡 <span class="text-slate-300 font-medium">步进机制</span>：行走停止 2.5 秒后资源自动暂停。
+                        💡 <span class="text-slate-300 font-medium">快捷键</span>：双击画面全屏 | <code>[ ]</code> 调倍速 | <code>↑ ↓</code> 调音量
                     </div>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <span class="text-xs text-slate-400">音量</span>
-                    <input type="range" id="volumeSlider" min="0" max="1" value="1" step="0.05" class="w-24 sm:w-32 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-                </div>
-                <div class="flex items-center space-x-2">
-                    <span class="text-xs text-slate-400">倍速</span>
-                    <input type="range" id="speedSlider" min="0.5" max="2.5" value="1.0" step="0.05" class="w-20 sm:w-28 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-                    <input type="number" id="speedInput" min="0.5" max="3.0" value="1.0" step="0.1" 
-                        class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center text-slate-200 focus:outline-none focus:border-blue-500">
+                
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs text-slate-400">音量</span>
+                        <input type="range" id="volumeSlider" min="0" max="1" value="1" step="0.05" class="w-20 sm:w-28 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs text-slate-400">倍速</span>
+                        <input type="range" id="speedSlider" min="0.5" max="2.5" value="1.0" step="0.05" class="w-16 sm:w-24 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                        <input type="number" id="speedInput" min="0.5" max="3.0" value="1.0" step="0.1" 
+                            class="w-14 bg-slate-900 border border-slate-700 rounded-lg px-1 py-1 text-xs text-center text-slate-200 focus:outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <!-- 面板内的全屏按钮 -->
+                    <button id="fullscreenBtn" class="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 transition-all cursor-pointer shadow-md" title="全屏播放">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    </button>
                 </div>
             </div>
         </div>
@@ -159,6 +213,7 @@
         const subUpload = document.getElementById('subUpload');
         const trackInfo = document.getElementById('trackInfo');
         const subInfo = document.getElementById('subInfo');
+        const mediaContainer = document.getElementById('mediaContainer');
         const mediaContent = document.getElementById('mediaContent');
         const mediaPlaceholder = document.getElementById('mediaPlaceholder');
         
@@ -186,10 +241,11 @@
         const togglePanelBtn = document.getElementById('togglePanelBtn');
         const toggleText = document.getElementById('toggleText');
         const toggleIcon = document.getElementById('toggleIcon');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
 
         // 全局状态
         let activeMedia = null;
-        let subtitles = []; // 存储字幕数据 [{start, end, text}]
+        let subtitles = []; 
         let currentSubtitleText = "";
         
         let stepCount = 0;
@@ -215,6 +271,7 @@
             if (file.type.startsWith('video')) {
                 activeMedia = document.createElement('video');
                 activeMedia.src = fileURL;
+                // 注意这里不要加 pointer-events-none，否则右键菜单出不来，但在外层加了确保双击生效
                 activeMedia.className = 'w-full max-h-[50vh] object-contain bg-black rounded-2xl';
                 activeMedia.playsInline = true;
                 mediaContent.appendChild(activeMedia);
@@ -245,7 +302,7 @@
         });
 
         /* -----------------------------------------
-           2. 多格式字幕解析与上传
+           2. 多格式字幕解析与上传 (Json/Lrc/Vtt)
         ----------------------------------------- */
         subUpload.addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -254,7 +311,7 @@
             const reader = new FileReader();
             reader.onload = function(evt) {
                 const text = evt.target.result;
-                subtitles = []; // 清空旧字幕
+                subtitles = [];
                 try {
                     if (file.name.endsWith('.json')) {
                         parseJSONSubtitle(text);
@@ -276,7 +333,6 @@
             reader.readAsText(file);
         });
 
-        // 2.1 解析 JSON 字幕 
         function parseJSONSubtitle(text) {
             const arr = JSON.parse(text);
             subtitles = arr.map(item => ({
@@ -286,7 +342,6 @@
             }));
         }
 
-        // 2.2 解析 LRC 字幕
         function parseLRCSubtitle(text) {
             const lines = text.split('\n');
             const lrcRegex = /\[(\d{2}):(\d{2}(?:\.\d+)?)\](.*)/;
@@ -296,12 +351,9 @@
                 if (match) {
                     const start = parseInt(match[1]) * 60 + parseFloat(match[2]);
                     const content = match[3].trim();
-                    if (content) {
-                        subtitles.push({ start: start, end: start, text: content });
-                    }
+                    if (content) subtitles.push({ start: start, end: start, text: content });
                 }
             }
-            // 补全 LRC 的 end 时间
             for(let i = 0; i < subtitles.length - 1; i++){
                 subtitles[i].end = subtitles[i+1].start;
             }
@@ -310,11 +362,8 @@
             }
         }
 
-        // 2.3 解析 VTT 字幕
         function parseVTTSubtitle(text) {
-            // 清理并分割块
             const blocks = text.replace(/\r/g, '').split(/\n\n+/);
-            
             for (const block of blocks) {
                 const lines = block.split('\n');
                 let timeLine = lines.find(l => l.includes('-->'));
@@ -327,13 +376,10 @@
                 const textIdx = lines.indexOf(timeLine) + 1;
                 const textContent = lines.slice(textIdx).join('\n').trim();
                 
-                if (textContent) {
-                    subtitles.push({ start, end, text: textContent });
-                }
+                if (textContent) subtitles.push({ start, end, text: textContent });
             }
         }
 
-        // VTT时间转秒 (支持 00:00:00.000 或 00:00.000)
         function vttTimeToSeconds(timeStr) {
             const parts = timeStr.replace(',', '.').split(':');
             let secs = 0;
@@ -345,7 +391,6 @@
             return secs;
         }
 
-
         /* -----------------------------------------
            3. 进度同步与字幕渲染更新逻辑
         ----------------------------------------- */
@@ -353,11 +398,9 @@
             if (!activeMedia || !activeMedia.duration) return;
             const currentTime = activeMedia.currentTime;
 
-            // 1. 同步字幕图层
             if (subtitles.length > 0) {
                 const currentSub = subtitles.find(sub => currentTime >= sub.start && currentTime <= sub.end);
                 if (currentSub && currentSub.text !== currentSubtitleText) {
-                    // 支持换行显示
                     subtitleText.innerHTML = currentSub.text.replace(/\n/g, '<br>'); 
                     currentSubtitleText = currentSub.text;
                     subtitleOverlay.style.opacity = '1';
@@ -368,7 +411,6 @@
                 }
             }
 
-            // 2. 进度条与动画同步 (防拖动冲突)
             if (!isUserDragging) {
                 const percent = (currentTime / activeMedia.duration) * 100;
                 progressBar.value = percent;
@@ -383,14 +425,13 @@
                 if (currentIntPercent > lastIntegerPercent) {
                     percentDisplay.classList.remove('pop-anim');
                     miniPercentDisplay.classList.remove('pop-anim');
-                    void percentDisplay.offsetWidth; // 重绘触发动画
+                    void percentDisplay.offsetWidth;
                     percentDisplay.classList.add('pop-anim');
                     miniPercentDisplay.classList.add('pop-anim');
                     lastIntegerPercent = currentIntPercent;
                 }
             }
         }
-
 
         /* -----------------------------------------
            4. 步进机制与权限监控
@@ -401,9 +442,7 @@
             const magnitude = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
             
             const threshold = 12.0; 
-            if (magnitude > threshold && lastAccelMagnitude <= threshold) {
-                registerStep();
-            }
+            if (magnitude > threshold && lastAccelMagnitude <= threshold) registerStep();
             lastAccelMagnitude = magnitude;
         }
 
@@ -430,9 +469,7 @@
                     } else {
                         alert("权限被拒绝，无法通过步数控制播放。");
                     }
-                } catch (e) {
-                    console.error(e);
-                }
+                } catch (e) { console.error(e); }
             } else if ('DeviceMotionEvent' in window) {
                 window.addEventListener('devicemotion', handleMotion);
                 permBtn.textContent = "传感器已监听";
@@ -444,17 +481,15 @@
 
         simStepBtn.addEventListener('click', () => registerStep());
 
-        // 步数静止监控 (0.1秒无行走自动暂停)
         setInterval(() => {
             if (activeMedia && activeMedia.src && !activeMedia.paused) {
-                if (Date.now() - lastStepTime > 100) {
+                if (Date.now() - lastStepTime > 1800) {
                     activeMedia.pause();
                     playStatus.textContent = "停止步行 ➔ 自动暂停";
                     playStatus.className = "text-sm font-bold text-amber-400 mt-2";
                 }
             }
         }, 200);
-
 
         /* -----------------------------------------
            5. 防冲突进度条与时间格式化
@@ -548,6 +583,32 @@
                 toggleIcon.classList.add('rotate-180');
             }
         });
+
+        /* -----------------------------------------
+           8. 全屏功能 (容器级全屏，保证字幕不消失)
+        ----------------------------------------- */
+        function toggleFullScreen() {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                // 进入全屏 (针对媒体容器触发，包含字幕)
+                if (mediaContainer.requestFullscreen) {
+                    mediaContainer.requestFullscreen();
+                } else if (mediaContainer.webkitRequestFullscreen) {
+                    mediaContainer.webkitRequestFullscreen();
+                }
+            } else {
+                // 退出全屏
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        }
+
+        // 绑定全屏按钮与双击视频全屏
+        fullscreenBtn.addEventListener('click', toggleFullScreen);
+        mediaContainer.addEventListener('dblclick', toggleFullScreen);
+
     </script>
 </body>
 </html>
