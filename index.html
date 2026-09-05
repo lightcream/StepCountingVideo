@@ -29,6 +29,21 @@
                          -1px  1px 0 #000,
                           1px  1px 0 #000;
         }
+        /* 自定义滚动条 */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.5); 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(71, 85, 105, 0.8); 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 1); 
+        }
 
         /* ----- 全屏状态下的专属样式 ----- */
         #mediaContainer:fullscreen {
@@ -49,7 +64,6 @@
             border: none;
             background: #000;
         }
-        /* 全屏时视频铺满并保持比例 */
         #mediaContainer:fullscreen video {
             max-height: 100vh !important;
             height: 100%;
@@ -58,24 +72,14 @@
             max-height: 100vh !important;
             height: 100%;
         }
-        /* 全屏时字幕稍微放大并自适应底部距离 */
-        #mediaContainer:fullscreen #subtitleOverlay {
-            bottom: 8%;
-        }
-        #mediaContainer:-webkit-full-screen #subtitleOverlay {
-            bottom: 8%;
-        }
-        #mediaContainer:fullscreen .subtitle-text {
-            font-size: 2.5rem;
-        }
-        #mediaContainer:-webkit-full-screen .subtitle-text {
-            font-size: 2.5rem;
-        }
+        #mediaContainer:fullscreen #subtitleOverlay { bottom: 8%; }
+        #mediaContainer:-webkit-full-screen #subtitleOverlay { bottom: 8%; }
+        #mediaContainer:fullscreen .subtitle-text { font-size: 2.5rem; }
+        #mediaContainer:-webkit-full-screen .subtitle-text { font-size: 2.5rem; }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-blue-500 selection:text-white pb-20">
 
-    <!-- 顶部主容器 -->
     <main class="max-w-3xl w-full mx-auto p-4 sm:p-6 flex-1 flex flex-col items-center justify-center text-center space-y-6">
         <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
             步进式多媒体奖励系统
@@ -87,36 +91,47 @@
         <!-- 资源与字幕上传组件 -->
         <div class="w-full bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 shadow-xl backdrop-blur-md space-y-4 text-left">
             <div>
-                <label class="block text-sm font-medium text-slate-300 mb-2">1. 上传多媒体资源 (支持视频、音频)</label>
-                <input type="file" id="mediaUpload" accept="audio/*,video/*" 
+                <div class="flex justify-between items-center mb-2">
+                    <label class="block text-sm font-medium text-slate-300">1. 上传多媒体 (支持多选，形成列表)</label>
+                    <button id="clearPlaylistBtn" class="hidden text-xs text-red-400 hover:text-red-300 transition-colors">清空列表</button>
+                </div>
+                <input type="file" id="mediaUpload" accept="audio/*,video/*" multiple
                     class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer transition-all">
+                
+                <!-- 播放列表UI容器 -->
+                <div id="playlistContainer" class="mt-3 bg-slate-950/50 rounded-xl border border-slate-700 max-h-40 overflow-y-auto custom-scrollbar hidden">
+                    <div class="sticky top-0 bg-slate-900/90 backdrop-blur-sm border-b border-slate-700 px-3 py-2 flex justify-between items-center z-10">
+                        <span class="text-xs font-semibold text-slate-300">播放列表 (<span id="playlistCount">0</span>)</span>
+                        <label class="flex items-center space-x-1.5 cursor-pointer text-xs text-slate-300 hover:text-white transition-colors">
+                            <input type="checkbox" id="shuffleToggle" class="rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900 w-3.5 h-3.5">
+                            <span>🔀 乱序播放</span>
+                        </label>
+                    </div>
+                    <ul id="playlistDOM" class="p-1 space-y-0.5"></ul>
+                </div>
                 <div id="trackInfo" class="mt-2 text-xs text-slate-400 italic">当前未加载任何多媒体文件</div>
             </div>
             
             <div class="border-t border-slate-700/50 pt-4">
-                <label class="block text-sm font-medium text-slate-300 mb-2">2. 上传字幕文件 (可选: 支持 .json / .lrc / .vtt)</label>
+                <label class="block text-sm font-medium text-slate-300 mb-2">2. 上传字幕 (可选: 支持 .json / .lrc / .vtt)</label>
                 <input type="file" id="subUpload" accept=".json,.lrc,.vtt,.txt" 
                     class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer transition-all">
-                <div id="subInfo" class="mt-2 text-xs text-slate-400 italic">当前未加载字幕</div>
+                <div id="subInfo" class="mt-2 text-xs text-slate-400 italic">当前未加载字幕 (切歌将自动重置字幕)</div>
             </div>
         </div>
 
-        <!-- 媒体展示区（包含字幕图层，双击可全屏） -->
+        <!-- 媒体展示区 -->
         <div id="mediaContainer" class="relative w-full flex items-center justify-center bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl min-h-[220px] group cursor-pointer" title="双击可切换全屏">
-            <!-- 占位提示 -->
             <div id="mediaPlaceholder" class="text-slate-500 text-sm flex flex-col items-center space-y-2 p-8 pointer-events-none">
                 <svg class="w-12 h-12 text-slate-600 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                <span>请先在上方上传音频或视频资源</span>
+                <span>请先在上方上传多媒体文件</span>
             </div>
-            <!-- 音视频DOM节点将挂载于此 -->
             <div id="mediaContent" class="w-full h-full flex justify-center items-center pointer-events-none"></div>
 
-            <!-- 字幕渲染图层 (绝对定位悬浮于画面上方) -->
             <div id="subtitleOverlay" class="absolute bottom-6 sm:bottom-10 w-full px-4 text-center pointer-events-none opacity-0 transition-opacity duration-200 z-10 flex flex-col items-center justify-end">
                 <span id="subtitleText" class="subtitle-text text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-wide"></span>
             </div>
             
-            <!-- 悬浮全屏提示图标（仅在 Hover 时显示） -->
             <div class="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
             </div>
@@ -169,23 +184,30 @@
                 <div class="flex justify-between text-xs font-medium text-slate-400">
                     <span id="currentTimeDisplay">00:00</span>
                     <div class="flex items-center space-x-1 bg-slate-900/80 px-3 py-0.5 rounded-full border border-slate-800">
-                        <span>已看进度:</span>
+                        <span>当前进度:</span>
                         <span id="percentDisplay" class="font-bold text-blue-400">0%</span>
                     </div>
                     <span id="durationDisplay">00:00</span>
                 </div>
-                <!-- 防冲突拖动进度条 -->
                 <input type="range" id="progressBar" min="0" max="100" value="0" step="0.1" 
                     class="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
             </div>
 
             <div class="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-800/80">
+                <!-- 左侧：播放列表切换控制与提示 -->
                 <div class="flex items-center space-x-3">
-                    <div class="text-xs text-slate-400">
-                        💡 <span class="text-slate-300 font-medium">快捷键</span>：双击画面全屏 | <code>[ ]</code> 调倍速 | <code>↑ ↓</code> 调音量
+                    <button id="prevBtn" class="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 transition-all shadow" title="上一首">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+                    </button>
+                    <button id="nextBtn" class="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 transition-all shadow" title="下一首">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                    </button>
+                    <div class="text-xs text-slate-400 hidden sm:block border-l border-slate-700 pl-3">
+                        💡 双击全屏 | <code>[ ]</code> 调倍速
                     </div>
                 </div>
                 
+                <!-- 右侧：音量与倍速 -->
                 <div class="flex items-center space-x-4">
                     <div class="flex items-center space-x-2">
                         <span class="text-xs text-slate-400">音量</span>
@@ -198,7 +220,6 @@
                             class="w-14 bg-slate-900 border border-slate-700 rounded-lg px-1 py-1 text-xs text-center text-slate-200 focus:outline-none focus:border-blue-500">
                     </div>
                     
-                    <!-- 面板内的全屏按钮 -->
                     <button id="fullscreenBtn" class="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 transition-all cursor-pointer shadow-md" title="全屏播放">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
                     </button>
@@ -213,10 +234,16 @@
         const subUpload = document.getElementById('subUpload');
         const trackInfo = document.getElementById('trackInfo');
         const subInfo = document.getElementById('subInfo');
+        
+        const playlistContainer = document.getElementById('playlistContainer');
+        const playlistDOM = document.getElementById('playlistDOM');
+        const playlistCount = document.getElementById('playlistCount');
+        const clearPlaylistBtn = document.getElementById('clearPlaylistBtn');
+        const shuffleToggle = document.getElementById('shuffleToggle');
+
         const mediaContainer = document.getElementById('mediaContainer');
         const mediaContent = document.getElementById('mediaContent');
         const mediaPlaceholder = document.getElementById('mediaPlaceholder');
-        
         const subtitleOverlay = document.getElementById('subtitleOverlay');
         const subtitleText = document.getElementById('subtitleText');
 
@@ -242,39 +269,113 @@
         const toggleText = document.getElementById('toggleText');
         const toggleIcon = document.getElementById('toggleIcon');
         const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
 
         // 全局状态
-        let activeMedia = null;
+        let playlist = [];         // 播放列表
+        let currentIndex = -1;     // 当前播放索引
+        
+        let activeMedia = null;    // 当前媒体元素
+        let objectURL = null;      // 媒体内存URL
         let subtitles = []; 
         let currentSubtitleText = "";
         
         let stepCount = 0;
-        let lastStepTime = Date.now();
+        let lastStepTime = Date.now() - 5000; // 初始为非活跃状态
         let isUserDragging = false;
         let isPanelHidden = false;
         let lastIntegerPercent = -1;
         let lastAccelMagnitude = 0;
 
         /* -----------------------------------------
-           1. 多媒体上传与渲染
+           1. 播放列表与媒体上传管理
         ----------------------------------------- */
         mediaUpload.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
 
-            const fileURL = URL.createObjectURL(file);
-            trackInfo.textContent = `已加载: ${file.name}`;
+            // 追加到播放列表
+            files.forEach(f => playlist.push(f));
             
-            mediaPlaceholder.style.display = 'none';
-            mediaContent.innerHTML = '';
+            // 渲染列表并显示 UI
+            renderPlaylist();
+            playlistContainer.classList.remove('hidden');
+            clearPlaylistBtn.classList.remove('hidden');
+            
+            // 若当前未在播放，直接播放刚上传的第一首
+            if (currentIndex === -1) {
+                playMedia(0);
+            }
+            
+            // 清空 input 确保下次同名文件也能触发 change
+            mediaUpload.value = '';
+        });
 
+        clearPlaylistBtn.addEventListener('click', () => {
+            playlist = [];
+            currentIndex = -1;
+            renderPlaylist();
+            playlistContainer.classList.add('hidden');
+            clearPlaylistBtn.classList.add('hidden');
+            
+            if (activeMedia) {
+                activeMedia.pause();
+                URL.revokeObjectURL(objectURL);
+                activeMedia = null;
+            }
+            mediaContent.innerHTML = '';
+            mediaPlaceholder.style.display = 'flex';
+            trackInfo.textContent = "播放列表已清空";
+            resetSubtitles();
+        });
+
+        function renderPlaylist() {
+            playlistCount.textContent = playlist.length;
+            playlistDOM.innerHTML = '';
+            playlist.forEach((file, index) => {
+                const li = document.createElement('li');
+                const isActive = index === currentIndex;
+                li.className = `text-xs px-3 py-2 rounded-lg cursor-pointer truncate transition-all duration-200 ${
+                    isActive 
+                    ? 'bg-blue-600/30 text-blue-300 border border-blue-500/50 shadow-inner font-bold' 
+                    : 'hover:bg-slate-800 text-slate-400 border border-transparent'
+                }`;
+                li.textContent = `${index + 1}. ${file.name}`;
+                li.onclick = () => playMedia(index);
+                playlistDOM.appendChild(li);
+            });
+        }
+
+        /* -----------------------------------------
+           2. 核心播放逻辑与切歌
+        ----------------------------------------- */
+        function playMedia(index) {
+            if (index < 0 || index >= playlist.length) return;
+            
+            // 清理旧资源
+            if (activeMedia) {
+                activeMedia.pause();
+                activeMedia.removeEventListener('timeupdate', handleTimeUpdate);
+                activeMedia.removeEventListener('ended', playNext);
+                if (objectURL) URL.revokeObjectURL(objectURL);
+                mediaContent.innerHTML = '';
+            }
+
+            // 重置字幕 (切换媒体时必须清空旧字幕以防错乱)
+            resetSubtitles();
+
+            currentIndex = index;
+            const file = playlist[currentIndex];
+            objectURL = URL.createObjectURL(file);
+            trackInfo.textContent = `▶ 正在播放: ${file.name} (${currentIndex + 1}/${playlist.length})`;
+            mediaPlaceholder.style.display = 'none';
+
+            // 创建新媒体节点
             if (file.type.startsWith('video')) {
                 activeMedia = document.createElement('video');
-                activeMedia.src = fileURL;
-                // 注意这里不要加 pointer-events-none，否则右键菜单出不来，但在外层加了确保双击生效
                 activeMedia.className = 'w-full max-h-[50vh] object-contain bg-black rounded-2xl';
                 activeMedia.playsInline = true;
-                mediaContent.appendChild(activeMedia);
             } else {
                 const card = document.createElement('div');
                 card.className = 'flex flex-col items-center justify-center p-8 space-y-3';
@@ -282,28 +383,81 @@
                     <div class="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shadow-inner animate-pulse">
                         <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
                     </div>
-                    <span class="text-sm font-semibold text-slate-300">🎵 正在播放音频</span>
+                    <span class="text-sm font-semibold text-slate-300">🎵 音频播放中: ${file.name}</span>
                 `;
                 mediaContent.appendChild(card);
                 activeMedia = document.createElement('audio');
-                activeMedia.src = fileURL;
-                mediaContent.appendChild(activeMedia);
             }
 
+            activeMedia.src = objectURL;
+            mediaContent.appendChild(activeMedia);
+
+            // 恢复基础设置
             activeMedia.volume = parseFloat(volumeSlider.value);
             activeMedia.playbackRate = parseFloat(speedSlider.value);
             activeMedia.load();
 
+            // 绑定事件
             activeMedia.addEventListener('loadedmetadata', () => {
                 durationDisplay.textContent = formatTime(activeMedia.duration);
             });
-
             activeMedia.addEventListener('timeupdate', handleTimeUpdate);
-        });
+            activeMedia.addEventListener('ended', playNext); // 自动下一曲
+
+            renderPlaylist(); // 更新高亮状态
+
+            // 智能继承播放状态：如果最近2.5秒内有步数（正在运动），切歌后自动继续播放
+            const isWalking = Date.now() - lastStepTime <= 1100;
+            if (isWalking) {
+                activeMedia.play().catch(() => {});
+                playStatus.textContent = "步数上涨中 ➔ 正常播放";
+                playStatus.className = "text-sm font-bold text-emerald-400 mt-2";
+            } else {
+                playStatus.textContent = "已就绪 ➔ 请开始步行以播放";
+                playStatus.className = "text-sm font-bold text-amber-400 mt-2";
+            }
+        }
+
+        function playNext() {
+            if (playlist.length === 0) return;
+            let nextIndex = currentIndex + 1;
+            
+            if (shuffleToggle.checked) {
+                if (playlist.length > 1) {
+                    do { nextIndex = Math.floor(Math.random() * playlist.length); } 
+                    while (nextIndex === currentIndex);
+                } else {
+                    nextIndex = 0; // 只有一首时重播
+                }
+            } else {
+                if (nextIndex >= playlist.length) nextIndex = 0; // 列表循环
+            }
+            playMedia(nextIndex);
+        }
+
+        function playPrev() {
+            if (playlist.length === 0) return;
+            let prevIndex = currentIndex - 1;
+            if (prevIndex < 0) prevIndex = playlist.length - 1;
+            playMedia(prevIndex);
+        }
+
+        nextBtn.addEventListener('click', playNext);
+        prevBtn.addEventListener('click', playPrev);
 
         /* -----------------------------------------
-           2. 多格式字幕解析与上传 (Json/Lrc/Vtt)
+           3. 字幕解析与管理
         ----------------------------------------- */
+        function resetSubtitles() {
+            subtitles = [];
+            currentSubtitleText = "";
+            subtitleText.innerHTML = "";
+            subtitleOverlay.style.opacity = '0';
+            subUpload.value = '';
+            subInfo.textContent = "当前未加载字幕 (可选: 切歌后需重新加载)";
+            subInfo.className = "mt-2 text-xs text-slate-400 italic";
+        }
+
         subUpload.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -313,19 +467,14 @@
                 const text = evt.target.result;
                 subtitles = [];
                 try {
-                    if (file.name.endsWith('.json')) {
-                        parseJSONSubtitle(text);
-                    } else if (file.name.endsWith('.lrc')) {
-                        parseLRCSubtitle(text);
-                    } else if (file.name.endsWith('.vtt') || text.includes('WEBVTT') || text.includes('-->')) {
-                        parseVTTSubtitle(text);
-                    } else {
-                        throw new Error("不支持的字幕格式或解析失败");
-                    }
+                    if (file.name.endsWith('.json')) parseJSONSubtitle(text);
+                    else if (file.name.endsWith('.lrc')) parseLRCSubtitle(text);
+                    else if (file.name.endsWith('.vtt') || text.includes('WEBVTT') || text.includes('-->')) parseVTTSubtitle(text);
+                    else throw new Error("不支持的字幕格式");
+                    
                     subInfo.textContent = `✅ 字幕已加载: ${file.name} (共 ${subtitles.length} 条)`;
                     subInfo.className = "mt-2 text-xs text-emerald-400 font-bold";
                 } catch (err) {
-                    console.error(err);
                     subInfo.textContent = `❌ 解析失败: ${err.message}`;
                     subInfo.className = "mt-2 text-xs text-red-400 font-bold";
                 }
@@ -345,21 +494,18 @@
         function parseLRCSubtitle(text) {
             const lines = text.split('\n');
             const lrcRegex = /\[(\d{2}):(\d{2}(?:\.\d+)?)\](.*)/;
-            
             for (const line of lines) {
                 const match = line.match(lrcRegex);
                 if (match) {
                     const start = parseInt(match[1]) * 60 + parseFloat(match[2]);
                     const content = match[3].trim();
-                    if (content) subtitles.push({ start: start, end: start, text: content });
+                    if (content) subtitles.push({ start, end: start, text: content });
                 }
             }
             for(let i = 0; i < subtitles.length - 1; i++){
                 subtitles[i].end = subtitles[i+1].start;
             }
-            if(subtitles.length > 0) {
-                subtitles[subtitles.length - 1].end = subtitles[subtitles.length - 1].start + 10;
-            }
+            if(subtitles.length > 0) subtitles[subtitles.length - 1].end = subtitles[subtitles.length - 1].start + 10;
         }
 
         function parseVTTSubtitle(text) {
@@ -372,7 +518,6 @@
                 const timeParts = timeLine.split('-->');
                 const start = vttTimeToSeconds(timeParts[0].trim());
                 const end = vttTimeToSeconds(timeParts[1].trim());
-                
                 const textIdx = lines.indexOf(timeLine) + 1;
                 const textContent = lines.slice(textIdx).join('\n').trim();
                 
@@ -382,22 +527,18 @@
 
         function vttTimeToSeconds(timeStr) {
             const parts = timeStr.replace(',', '.').split(':');
-            let secs = 0;
-            if (parts.length === 3) {
-                secs = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
-            } else if (parts.length === 2) {
-                secs = parseInt(parts[0]) * 60 + parseFloat(parts[1]);
-            }
-            return secs;
+            if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+            return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
         }
 
         /* -----------------------------------------
-           3. 进度同步与字幕渲染更新逻辑
+           4. 进度同步与字幕渲染
         ----------------------------------------- */
         function handleTimeUpdate() {
             if (!activeMedia || !activeMedia.duration) return;
             const currentTime = activeMedia.currentTime;
 
+            // 字幕渲染
             if (subtitles.length > 0) {
                 const currentSub = subtitles.find(sub => currentTime >= sub.start && currentTime <= sub.end);
                 if (currentSub && currentSub.text !== currentSubtitleText) {
@@ -411,6 +552,7 @@
                 }
             }
 
+            // 进度条与时间更新
             if (!isUserDragging) {
                 const percent = (currentTime / activeMedia.duration) * 100;
                 progressBar.value = percent;
@@ -434,7 +576,7 @@
         }
 
         /* -----------------------------------------
-           4. 步进机制与权限监控
+           5. 步进机制与权限监控
         ----------------------------------------- */
         function handleMotion(event) {
             const acc = event.accelerationIncludingGravity || event.acceleration;
@@ -466,9 +608,7 @@
                         window.addEventListener('devicemotion', handleMotion);
                         permBtn.textContent = "权限已获取 (移动端)";
                         permBtn.classList.replace('bg-emerald-600', 'bg-blue-600');
-                    } else {
-                        alert("权限被拒绝，无法通过步数控制播放。");
-                    }
+                    } else { alert("权限被拒绝，无法通过步数控制播放。"); }
                 } catch (e) { console.error(e); }
             } else if ('DeviceMotionEvent' in window) {
                 window.addEventListener('devicemotion', handleMotion);
@@ -481,9 +621,10 @@
 
         simStepBtn.addEventListener('click', () => registerStep());
 
+        // 步数心跳检测，停止后暂停播放
         setInterval(() => {
             if (activeMedia && activeMedia.src && !activeMedia.paused) {
-                if (Date.now() - lastStepTime > 1800) {
+                if (Date.now() - lastStepTime > 2500) {
                     activeMedia.pause();
                     playStatus.textContent = "停止步行 ➔ 自动暂停";
                     playStatus.className = "text-sm font-bold text-amber-400 mt-2";
@@ -492,7 +633,7 @@
         }, 200);
 
         /* -----------------------------------------
-           5. 防冲突进度条与时间格式化
+           6. 防冲突进度条与时间格式化
         ----------------------------------------- */
         function formatTime(seconds) {
             if (isNaN(seconds)) return "00:00";
@@ -503,7 +644,6 @@
 
         progressBar.addEventListener('mousedown', () => { isUserDragging = true; });
         progressBar.addEventListener('touchstart', () => { isUserDragging = true; });
-
         progressBar.addEventListener('input', (e) => {
             if (activeMedia && activeMedia.duration) {
                 const val = parseFloat(e.target.value);
@@ -514,11 +654,9 @@
                 miniProgressFill.style.width = `${val}%`;
             }
         });
-
         progressBar.addEventListener('change', (e) => {
             if (activeMedia && activeMedia.duration) {
-                const val = parseFloat(e.target.value);
-                activeMedia.currentTime = (val / 100) * activeMedia.duration;
+                activeMedia.currentTime = (parseFloat(e.target.value) / 100) * activeMedia.duration;
             }
             isUserDragging = false;
         });
@@ -526,14 +664,12 @@
         miniBarContainer.addEventListener('click', (e) => {
             if (activeMedia && activeMedia.duration) {
                 const rect = miniBarContainer.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const percent = Math.max(0, Math.min(1, clickX / rect.width));
-                activeMedia.currentTime = percent * activeMedia.duration;
+                activeMedia.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * activeMedia.duration;
             }
         });
 
         /* -----------------------------------------
-           6. 音量、倍速与快捷键控制
+           7. 音量、倍速与快捷键控制
         ----------------------------------------- */
         volumeSlider.addEventListener('input', (e) => {
             if (activeMedia) activeMedia.volume = parseFloat(e.target.value);
@@ -553,14 +689,12 @@
             if (e.target.tagName === 'INPUT') return;
             if (e.code === 'ArrowUp') {
                 e.preventDefault();
-                const newVol = Math.min(1, parseFloat(volumeSlider.value) + 0.05);
-                volumeSlider.value = newVol;
-                if (activeMedia) activeMedia.volume = newVol;
+                volumeSlider.value = Math.min(1, parseFloat(volumeSlider.value) + 0.05);
+                if (activeMedia) activeMedia.volume = volumeSlider.value;
             } else if (e.code === 'ArrowDown') {
                 e.preventDefault();
-                const newVol = Math.max(0, parseFloat(volumeSlider.value) - 0.05);
-                volumeSlider.value = newVol;
-                if (activeMedia) activeMedia.volume = newVol;
+                volumeSlider.value = Math.max(0, parseFloat(volumeSlider.value) - 0.05);
+                if (activeMedia) activeMedia.volume = volumeSlider.value;
             } else if (e.code === 'BracketRight' || e.code === 'Equal') {
                 updateSpeed(parseFloat(speedSlider.value) + 0.1);
             } else if (e.code === 'BracketLeft' || e.code === 'Minus') {
@@ -569,7 +703,7 @@
         });
 
         /* -----------------------------------------
-           7. 隐藏/显示设置面板切换
+           8. 面板与全屏控制
         ----------------------------------------- */
         togglePanelBtn.addEventListener('click', () => {
             isPanelHidden = !isPanelHidden;
@@ -584,28 +718,15 @@
             }
         });
 
-        /* -----------------------------------------
-           8. 全屏功能 (容器级全屏，保证字幕不消失)
-        ----------------------------------------- */
         function toggleFullScreen() {
             if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                // 进入全屏 (针对媒体容器触发，包含字幕)
-                if (mediaContainer.requestFullscreen) {
-                    mediaContainer.requestFullscreen();
-                } else if (mediaContainer.webkitRequestFullscreen) {
-                    mediaContainer.webkitRequestFullscreen();
-                }
+                if (mediaContainer.requestFullscreen) mediaContainer.requestFullscreen();
+                else if (mediaContainer.webkitRequestFullscreen) mediaContainer.webkitRequestFullscreen();
             } else {
-                // 退出全屏
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                }
+                if (document.exitFullscreen) document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
             }
         }
-
-        // 绑定全屏按钮与双击视频全屏
         fullscreenBtn.addEventListener('click', toggleFullScreen);
         mediaContainer.addEventListener('dblclick', toggleFullScreen);
 
